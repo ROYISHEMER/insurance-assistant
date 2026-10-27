@@ -18,6 +18,10 @@ def _canonical(number: str) -> str:
     return number
 
 
+def without_thousands(text: str) -> str:
+    return _THOUSANDS.sub("", text)
+
+
 def numbers_in(text: str) -> set[str]:
     return {_canonical(n) for n in _NUMBER.findall(_THOUSANDS.sub("", text))}
 

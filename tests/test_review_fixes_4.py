@@ -313,3 +313,44 @@ def test_unemployed_on_open_claim_is_not_a_cancel_signal(csv_repo):
 
 def test_explicit_verb_still_cancels(csv_repo):
     assert answer("תבטלו לי את הפוליסה 4471", csv_repo).decision.code == "CANCEL_ESTIMATE"
+
+
+# --- re-check: id types, whole-token grounding, JSON decoding -------------------------------------------------------
+
+@pytest.mark.parametrize("key,value", [("policy_id", True), ("policy_id", ["5001"]), ("policy_id", {"id": 5001}),
+                                       ("policy_id", None), ("customer_id", False), ("customer_id", ["C-2001"]),
+                                       ("customer_id", None), ("policy_id", 5001.0)])
+def test_id_fields_must_be_string_or_int(servers, key, value):
+    (port, url), _ = servers
+    record = dict(RECORD, **{key: value})
+    Scripted.routes[(port, "/policies/5001")] = json_route(record)
+    Scripted.routes[(port, "/customers/C-2001/policies")] = json_route([record])
+    with pytest.raises(RepositoryUnavailable):
+        ApiPolicyRepository(url).get("5001")
+    with pytest.raises(RepositoryUnavailable):
+        ApiPolicyRepository(url).by_customer("C-2001")
+
+
+def test_integer_policy_id_is_accepted(servers):
+    (port, url), _ = servers
+    Scripted.routes[(port, "/policies/5001")] = json_route(dict(RECORD, policy_id=5001))
+    assert ApiPolicyRepository(url).get("5001").policy_id == "5001"
+
+
+@pytest.mark.parametrize("text,code", [
+    ("יש להחזיר ללקוח 1088.50 בגין חיוב כפול (02_החזרים.md §1).", "UNGROUNDED"),
+    ("ללקוח C-1088.5 מגיע החזר (02_החזרים.md §1).", "UNGROUNDED"),
+    ("ללקוח 1,088 מגיע החזר (02_החזרים.md §1).", "GENERAL_POLICY"),
+    ("ללקוח 10880 מגיע החזר (02_החזרים.md §1).", "UNGROUNDED"),
+    ("ללקוח 1088. החזר מגיע לפי הנוהל (02_החזרים.md §1).", "GENERAL_POLICY"),
+])
+def test_identifier_must_be_the_whole_token(csv_repo, text, code):
+    assert answer("מה הנוהל להחזר על חיוב כפול ללקוח C-1088?", csv_repo, FakeLLM(text)).decision.code == code
+
+
+@pytest.mark.parametrize("body", [b"[" * 100_000 + b"]" * 100_000, b"\xff\xfe", b'{"a": NaN, "b": '])
+def test_any_json_decoding_failure_is_unavailable(servers, body):
+    (port, url), _ = servers
+    Scripted.routes[(port, "/policies/5001")] = lambda h: h.send(200, body)
+    with pytest.raises(RepositoryUnavailable):
+        ApiPolicyRepository(url).get("5001")

@@ -11,7 +11,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from .extract import Extraction, extract, normalize_question
-from .grounding import currency_amounts, numbers_in, ungrounded_numbers
+from .grounding import currency_amounts, numbers_in, ungrounded_numbers, without_thousands
 from .guardrails import mentions_regulator
 from .llm import LLMError
 from .models import DEFAULT_AS_OF, Decision, Fact, Intent, Outcome, Policy
@@ -54,7 +54,10 @@ INTENT_NAMES = {
     Intent.GENERAL_POLICY: "שאלה כללית על הנהלים",
     Intent.UNKNOWN: "בקשה לא מזוהה",
 }
-_ID_CONTEXT = re.compile(r"(?:(?<![^\W\d_])[ושהבלמכ]*(?:פוליסה|פוליסת|לקוח) ?|(?<![A-Za-z])C-)(\d{4})(?!\d)")
+# The number is taken as a whole token, decimal part included: "לקוח 1088.50" is the number 1088.5, not id 1088.
+_ID_CONTEXT = re.compile(
+    r"(?:(?<![^\W\d_])[ושהבלמכ]*(?:פוליסה|פוליסת|לקוח) ?|(?<![A-Za-z])C-)(\d+(?:\.\d+)?)(?![\d.]?\d)"
+)
 NEEDS_POLICY = (Intent.CANCELLATION, Intent.CLAIM_STATUS, Intent.CLAIM_PAYMENT_DATE, Intent.POLICY_INFO)
 _CITATION = re.compile(r"([^\s()\[\]§,:]+\.md)\s*§\s*(\d+[א-ת]?|[א-ת]{1,2})(?![א-ת])")
 
@@ -251,7 +254,8 @@ def general_answer(question: str, llm, policies_dir: str | Path, policy_id: str 
     # policy). The policy / customer ids found in the question are the only exception.
     # A policy / customer id from the question may appear only in identifier context ("פוליסה 4471",
     # "ללקוח C-1088"); anywhere else it is just a number and must be in the procedures.
-    in_context = _ID_CONTEXT.sub(lambda m: " " if m.group(1) in id_numbers else m.group(0), without_citations)
+    in_context = _ID_CONTEXT.sub(lambda m: " " if m.group(1) in id_numbers else m.group(0),
+                                 without_thousands(without_citations))
     stray_numbers = ungrounded_numbers(in_context, "\n".join(docs.values()))
     # A currency-marked amount must be in the procedures themselves; the identifier exception never applies.
     doc_numbers = numbers_in("\n".join(docs.values()))

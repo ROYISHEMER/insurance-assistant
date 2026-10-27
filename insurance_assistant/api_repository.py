@@ -101,12 +101,16 @@ class ApiPolicyRepository:
             raise RepositoryUnavailable(f"policy API returned HTTP {status}")
         try:
             return True, json.loads(body.decode("utf-8"))
-        except (UnicodeDecodeError, ValueError):
+        except Exception:  # UnicodeDecodeError, ValueError, RecursionError on absurd nesting, ...
             raise RepositoryUnavailable("policy API returned invalid JSON") from None
 
     def _policy(self, record: object) -> Policy:
         if not isinstance(record, dict):
             raise RepositoryUnavailable("policy API returned a record that is not an object")
+        for key in ("policy_id", "customer_id"):
+            value = record.get(key)
+            if isinstance(value, bool) or not isinstance(value, (str, int)):
+                raise RepositoryUnavailable(f"policy API returned a {key} that is not a string or an integer")
         return policy_from_values({column: _raw(record.get(column)) for column in COLUMNS}, self.source_name)
 
     # --- PolicyRepository --------------------------------------------------------------------
