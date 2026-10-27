@@ -43,3 +43,23 @@ def load_policy_docs(directory: str | Path = DEFAULT_DOCS_DIR) -> dict[str, str]
     if not folder.is_dir():
         raise StartupError(f"תיקיית הנהלים לא נמצאה: {folder}")
     return {name: _read_doc(folder / name) for name in POLICY_DOC_FILES}
+
+
+_SECTION_START = re.compile(r"^##[ \t]+(\d+|[א-ת]{1,2})\.", re.MULTILINE)
+_NEXT_HEADING = re.compile(r"^#{1,2}[ \t]", re.MULTILINE)
+_SUBSECTION_START = re.compile(r"^\*\*([א-ת])\.", re.MULTILINE)
+
+
+def split_sections(text: str) -> dict[str, str]:
+    """Sections keyed "1" / "א", plus lettered subsections keyed "2ג" (the bold "**ג.**" paragraphs)."""
+    sections: dict[str, str] = {}
+    for match in _SECTION_START.finditer(text):
+        end = _NEXT_HEADING.search(text, match.end())
+        body = text[match.start():end.start() if end else len(text)].strip()
+        key = match.group(1)
+        sections[key] = body
+        subs = list(_SUBSECTION_START.finditer(body))
+        for i, sub in enumerate(subs):
+            stop = subs[i + 1].start() if i + 1 < len(subs) else len(body)
+            sections[key + sub.group(1)] = body[sub.start():stop].strip()
+    return sections
