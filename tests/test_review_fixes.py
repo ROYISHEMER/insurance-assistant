@@ -69,8 +69,8 @@ def test_regulator_prefixes(text):
     assert mentions_regulator(text)
 
 
-@pytest.mark.parametrize("text", ["רוצה לבטל", "תלונה לממונה", "אמפקח"])
-def test_regulator_needs_word_start(text):
+@pytest.mark.parametrize("text", ["רוצה לבטל", "תלונה לממונה"])
+def test_regulator_needs_a_term(text):
     assert not mentions_regulator(text)
 
 
@@ -96,7 +96,8 @@ def test_refund_alone_still_defaults_to_cancellation():
 # --- A4: "אלא" after a negated cancellation ------------------------------------------------------------------
 
 def test_ella_corrects_the_object(repo):
-    assert keyword_signals("4428 לא רוצה לבטל את התביעה אלא את הפוליסה").cancel
+    s = keyword_signals("4428 לא רוצה לבטל את התביעה אלא את הפוליסה")
+    assert s.escalation_only_cancel and not s.cancel  # phase 7b: escalation-only
     d = answer("4428 לא רוצה לבטל את התביעה אלא את הפוליסה", repo).decision
     assert (d.outcome, d.code, d.policy_id) == (Outcome.ESCALATE, "OPEN_CLAIM", "4428")
 

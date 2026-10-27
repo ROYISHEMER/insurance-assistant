@@ -735,5 +735,60 @@
    "additional_request",
    "conditional_estimate"
   ]
+ },
+ {
+  "id": "regulator-many-prefixes",
+  "set": "core",
+  "q": "4471 רוצה לבטל ואומר שיתלונן ושהממונה על הביטוח יטפל בזה",
+  "outcome": "ESCALATE",
+  "code": "REGULATOR",
+  "absent": [
+   "additional_request",
+   "conditional_estimate"
+  ]
+ },
+ {
+  "id": "phone-maqaf",
+  "set": "core",
+  "q": "טלפון 050־4471־123, הלקוח רוצה לבטל",
+  "outcome": "CANNOT_ANSWER",
+  "code": "NO_POLICY",
+  "absent": [
+   "additional_request",
+   "conditional_estimate"
+  ]
+ },
+ {
+  "id": "currency-before-number",
+  "set": "core",
+  "q": "לקוח רוצה לבטל; החיוב שלו NIS 4471",
+  "outcome": "CANNOT_ANSWER",
+  "code": "NO_POLICY",
+  "absent": [
+   "additional_request",
+   "conditional_estimate"
+  ]
+ },
+ {
+  "id": "compound-surname",
+  "set": "core",
+  "q": "איתי מזרחי-פרץ רוצה לבטל",
+  "outcome": "CANNOT_ANSWER",
+  "code": "NO_POLICY",
+  "absent": [
+   "additional_request",
+   "conditional_estimate"
+  ]
+ },
+ {
+  "id": "excluded-product",
+  "set": "core",
+  "q": "C-1088 רוצה לבטל את הדירה ולא את הרכב",
+  "outcome": "CANNOT_ANSWER",
+  "code": "PRODUCT_MISMATCH",
+  "absent": [
+   "additional_request",
+   "conditional_estimate"
+  ]
  }
 ]

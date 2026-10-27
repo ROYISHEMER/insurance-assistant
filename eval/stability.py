@@ -128,6 +128,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     counts = {"STABLE-CORRECT": 0, "HARMLESS FLIP": 0, "ERROR": 0}
+    print(f"Stability: {len(load_cases())} cases × {args.runs} runs each")
     for case in load_cases():
         results = [run_case(case, repo, llm) for _ in range(args.runs)]
         verdict, errors = classify(case, results)
@@ -139,7 +140,7 @@ def main(argv: list[str] | None = None) -> int:
             print_runs(results)
 
     adversarial_errors = adversarial(repo, llm)
-    print(f"\nSummary: {counts} | adversarial errors: {adversarial_errors}")
+    print(f"\nSummary ({args.runs} runs per case): {counts} | adversarial errors: {adversarial_errors}")
     return 1 if counts["ERROR"] or adversarial_errors else 0
 
 

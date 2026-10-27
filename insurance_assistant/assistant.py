@@ -11,7 +11,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from .extract import Extraction, extract
-from .grounding import ungrounded_numbers
+from .grounding import currency_amounts, numbers_in, ungrounded_numbers
 from .llm import LLMError
 from .models import DEFAULT_AS_OF, Decision, Fact, Intent, Outcome, Policy
 from .policy_docs import PROJECT_ROOT, load_policy_docs, split_sections
@@ -146,15 +146,16 @@ def _resolve(ex: Extraction, repo: PolicyRepository) -> tuple[Policy | None, Dec
     else:
         return None, None
 
-    # Resolved from a customer id or a name: the product the rep mentioned must exist for this customer.
+    # Resolved from a customer id or a name: EVERY product the rep mentioned must exist for this customer.
+    owned = {p.product for p in candidates}
+    foreign = [p for p in ex.products_mentioned if p not in owned]
+    if foreign:
+        products = ", ".join(f"{p.product} ({p.policy_id})" for p in candidates)
+        d = _cannot(intent, "PRODUCT_MISMATCH", f"ללקוח אין פוליסת {', '.join(foreign)}; הפוליסות שלו: {products}",
+                    f"אישור מהלקוח: על איזו פוליסה מדובר (נאמר: {', '.join(ex.products_mentioned)})")
+        return None, _list_policies(d, candidates)
     if ex.product_hint:
-        narrowed = [p for p in candidates if p.product == ex.product_hint]
-        if not narrowed:
-            products = ", ".join(f"{p.product} ({p.policy_id})" for p in candidates)
-            d = _cannot(intent, "PRODUCT_MISMATCH", f"ללקוח אין פוליסת {ex.product_hint}; הפוליסות שלו: {products}",
-                        f"אישור מהלקוח: על איזו פוליסה מדובר (נאמר: {ex.product_hint})")
-            return None, _list_policies(d, candidates)
-        candidates = narrowed
+        candidates = [p for p in candidates if p.product == ex.product_hint]
     if len(candidates) > 1:
         d = _cannot(intent, "MULTIPLE_POLICIES", "ללקוח כמה פוליסות – יש לבחור אחת", "מספר הפוליסה הרלוונטית")
         return None, _list_policies(d, candidates)
@@ -196,6 +197,9 @@ def general_answer(question: str, llm, policies_dir: str | Path, policy_id: str 
     # Numbers are grounded in the procedures only – never in the question (a number the rep typed is not
     # policy). The policy / customer ids found in the question are the only exception.
     stray_numbers = ungrounded_numbers(without_citations, "\n".join([*docs.values(), *sorted(id_numbers)]))
+    # A currency-marked amount must be in the procedures themselves; the identifier exception never applies.
+    doc_numbers = numbers_in("\n".join(docs.values()))
+    stray_numbers = sorted(set(stray_numbers) | (currency_amounts(without_citations) - doc_numbers))
     if not citations or bad_citations or stray_numbers:
         d = _cannot(intent, "UNGROUNDED", "תשובת מודל השפה לא עברה בדיקת עיגון במסמכים", policy_id=policy_id)
         if not citations:
@@ -302,10 +306,16 @@ def _decide(question: str, ex: Extraction, repo, llm, as_of: date, policies_dir)
         # Degraded mode: any "בטל"/"ביטול" (even "דמי ביטול") escalates. Deliberate over-escalation:
         # without the LLM we cannot tell context from request, and a missed escalation costs money.
         or (ex.via == "keywords" and ex.cancel_keyword_raw)
+        or ex.escalation_only_cancel
     ):
         return claims_escalation(policy, Intent.CANCELLATION), path + ["rules:claims_escalation"]
 
     intent = ex.primary_intent
+    if intent is Intent.CANCELLATION and ex.escalation_only_cancel and policy is not None:
+        # "לא רוצה לבטל ... אלא ..." may only escalate; it never produces a cancellation answer or amounts.
+        d = _cannot(intent, "UNCLEAR_REQUEST",
+                    f"לא ברור מה הלקוח מבקש לגבי פוליסה {policy.policy_id} – בקש מהלקוח לפרט", policy=policy)
+        return d, path + ["unclear"]
     if intent is Intent.POLICY_INFO and policy is None and llm is not None:
         intent = Intent.GENERAL_POLICY
     if intent in NEEDS_POLICY and policy is None:

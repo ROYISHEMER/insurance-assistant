@@ -5,6 +5,7 @@ import json
 import re
 from dataclasses import dataclass, field
 
+from .grounding import CURRENCY
 from .guardrails import mentions_regulator
 from .llm import LLMError
 from .models import Intent
@@ -16,11 +17,12 @@ _DIGITS = str.maketrans(
     {**{chr(0x0660 + i): str(i) for i in range(10)}, **{chr(0x06F0 + i): str(i) for i in range(10)}}
 )
 _THOUSANDS = re.compile(r"(?<=\d),(?=\d{3}(?!\d))")
+_DIGIT_DASH = re.compile(r"(?<=\d)[\u05be\u2013\u2014\u2212](?=\d)")  # maqaf, en/em dash, minus sign
 
 
 def normalize_question(question: str) -> str:
-    """Arabic-Indic and Persian digits -> 0-9; drop a thousands comma between digits."""
-    return _THOUSANDS.sub("", question.translate(_DIGITS))
+    """Arabic-Indic and Persian digits -> 0-9; drop a thousands comma; a dash between digits -> "-"."""
+    return _DIGIT_DASH.sub("-", _THOUSANDS.sub("", question.translate(_DIGITS)))
 
 
 # --- identifiers -------------------------------------------------------------------
@@ -49,22 +51,25 @@ class Identifiers:
     other_customer_ids: list[str] = field(default_factory=list)
     name_matches: dict[str, set[str]] = field(default_factory=dict)
     product_hint: str | None = None
+    products_mentioned: list[str] = field(default_factory=list)
 
 
-_AMOUNT_AFTER = re.compile(r"\s*(?:₪|ש\"ח|ש״ח|שח(?![א-ת])|שקל|NIS(?![A-Za-z]))")
-_AMOUNT_BEFORE = re.compile(r"₪\s*$")
+_AMOUNT_AFTER = re.compile(rf" ?{CURRENCY}", re.IGNORECASE)
+_AMOUNT_BEFORE = re.compile(rf"{CURRENCY} ?$", re.IGNORECASE)
 
 
 def _is_amount(text: str, match: re.Match) -> bool:
-    """"5000 ₪" / "₪5000" is money, not a policy id."""
+    """"5000 ₪", "₪5000", "NIS 4471", "4471 nis" are money, not policy ids."""
     return bool(_AMOUNT_AFTER.match(text, match.end()) or _AMOUNT_BEFORE.search(text[:match.start()]))
 
 
 def name_appears_in(name: str, text: str) -> bool:
-    """The full name, not followed by a Hebrew letter, preceded by a non-letter or up to two prefix letters."""
+    """The full name, preceded by a non-letter or up to two prefix letters, and not followed by a letter
+    or by a dash and a letter ("מזרחי-פרץ" is a different surname)."""
     if not name:
         return False
-    pattern = r"(?<![^\W\d_])[ושהבלמכ]{0,2}" + re.escape(name) + r"(?![א-ת])"
+    pattern = (r"(?<![^\W\d_])[ושהבלמכ]{0,2}" + re.escape(name)
+               + r"(?![^\W\d_])(?![-\u05be\u2013\u2014][^\W\d_])")
     return re.search(pattern, text) is not None
 
 
@@ -97,6 +102,7 @@ def extract_identifiers(text: str, repo: PolicyRepository) -> Identifiers:
             ids.name_matches.setdefault(policy.customer_name, set()).add(policy.customer_id)
 
     products = [name for name, pattern in _PRODUCTS.items() if pattern.search(text)]
+    ids.products_mentioned = products
     if len(products) == 1:
         ids.product_hint = products[0]
     return ids
@@ -129,10 +135,13 @@ def _negated_cancellations(text: str) -> list[re.Match]:
 
 
 def _corrected_by_ella(text: str, negations: list[re.Match]) -> bool:
-    """"לא רוצה לבטל את התביעה אלא את הפוליסה": "אלא" later in the same sentence corrects the object."""
+    """"לא רוצה לבטל את התביעה אלא את הפוליסה": "אלא" later in the same sentence, with no cancellation verb
+    of its own after it. Too ambiguous to answer ("אלא לקבל החזר" also fits), so it may only escalate."""
     for m in negations:
         end = _SENTENCE_END.search(text, m.end())
-        if _ELLA.search(text, m.end(), end.start() if end else len(text)):
+        stop = end.start() if end else len(text)
+        ella = _ELLA.search(text, m.end(), stop)
+        if ella and not _has_cancel_word(text[ella.end():stop]):
             return True
     return False
 
@@ -153,6 +162,7 @@ class Signals:
     cancel: bool = False
     cancel_keyword_raw: bool = False
     negated_cancel: bool = False
+    escalation_only_cancel: bool = False
 
     @property
     def payment(self) -> bool:
@@ -171,9 +181,10 @@ def keyword_signals(text: str) -> Signals:
         documents="מסמכ" in stripped,
         details="פרטי" in stripped or "סטטוס" in stripped,
         owed="מגיע לו" in stripped or "מגיע לה" in stripped,
-        cancel=corrected or _has_cancel_word(_CANCEL_CONTEXT.sub(" ", stripped)),
+        cancel=_has_cancel_word(_CANCEL_CONTEXT.sub(" ", stripped)),
         cancel_keyword_raw=corrected or _has_cancel_word(stripped),
         negated_cancel=bool(negations),
+        escalation_only_cancel=corrected,
     )
 
 
@@ -305,12 +316,14 @@ class Extraction:
     other_customer_ids: list[str] = field(default_factory=list)
     name_matches: dict[str, set[str]] = field(default_factory=dict)
     product_hint: str | None = None
+    products_mentioned: list[str] = field(default_factory=list)
     regulator: bool = False
     via: str = "keywords"  # "llm" or "keywords"
     llm_failed: bool = False
     cancel_keyword_raw: bool = False
     possible_cancellation: bool = False
     keyword_cancel_unlisted: bool = False
+    escalation_only_cancel: bool = False  # escalates on open/unknown claims, never creates a cancellation answer
 
 
 def _is_identified(ids: Identifiers, repo: PolicyRepository) -> bool:
@@ -333,6 +346,8 @@ def extract(question: str, repo: PolicyRepository, llm=None) -> Extraction:
             other_customer_ids=ids.other_customer_ids,
             name_matches=ids.name_matches,
             product_hint=ids.product_hint,
+            products_mentioned=ids.products_mentioned,
+            escalation_only_cancel=signals.escalation_only_cancel,
             cancel_keyword_raw=signals.cancel_keyword_raw,
             possible_cancellation=pick.possible_cancellation,
             keyword_cancel_unlisted=pick.keyword_cancel_unlisted,
