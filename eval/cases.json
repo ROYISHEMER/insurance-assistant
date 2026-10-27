@@ -1,0 +1,673 @@
+[
+ {
+  "id": "ronit-example",
+  "set": "core",
+  "q": "הלקוח 4471 רוצה לבטל, מה מגיע לו?",
+  "outcome": "ANSWER_WITH_GAPS",
+  "code": "CANCEL_ESTIMATE",
+  "numbers": {
+   "fee": 150,
+   "grant": 492,
+   "conditional_estimate": 342,
+   "effective_date": "2026-10-31"
+  },
+  "trap": "דמי ביטול רכב 150 (חריג גובר)",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "open-claim-1",
+  "set": "core",
+  "q": "לקוח 4425 רוצה לבטל את הפוליסה",
+  "outcome": "ESCALATE",
+  "code": "OPEN_CLAIM",
+  "trap": "תביעה פתוחה",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "open-claim-2",
+  "set": "core",
+  "q": "4428 מבקש לבטל, כמה יקבל?",
+  "outcome": "ESCALATE",
+  "code": "OPEN_CLAIM",
+  "trap": "שתי תביעות פתוחות",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "frozen",
+  "set": "core",
+  "q": "4455 רוצה לבטל",
+  "outcome": "ANSWER",
+  "code": "FROZEN",
+  "trap": "פוליסה מוקפאת",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "trip-started",
+  "set": "core",
+  "q": "4437 רוצה לבטל את ביטוח הנסיעות",
+  "outcome": "ANSWER_WITH_GAPS",
+  "code": "TRIP_STARTED",
+  "trap": "תאריך יציאה בפועל חסר – לא ניתן לקבוע",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "trip-future",
+  "set": "core",
+  "q": "4419 רוצה לבטל",
+  "outcome": "ANSWER_WITH_GAPS",
+  "code": "TRAVEL_BEFORE_TRIP",
+  "numbers": {
+   "last_cancel_day": "2026-12-21",
+   "fee": 50,
+   "effective_date": "2026-10-31",
+   "arrears": false
+  },
+  "trap": "תאריך יציאה בפועל חסר – תשובה מותנית",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "cooling-off",
+  "set": "core",
+  "q": "4416 רוצה לבטל",
+  "outcome": "ANSWER_WITH_GAPS",
+  "code": "COOLING_OFF",
+  "numbers": {
+   "fee": 0
+  },
+  "trap": "התחרטות גוברת על 150 ברכב",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "old-health",
+  "set": "core",
+  "q": "4401 רוצה לבטל",
+  "outcome": "ANSWER_WITH_GAPS",
+  "code": "CANCEL_ESTIMATE",
+  "numbers": {
+   "fee": 0,
+   "effective_date": "2026-11-24",
+   "potential_grant": 288
+  },
+  "trap": "בריאות לפני 2024 + מענק תלוי נתון חסר",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "health-boundary",
+  "set": "core",
+  "q": "4446 רוצה לבטל",
+  "outcome": "ANSWER_WITH_GAPS",
+  "code": "CANCEL_ESTIMATE",
+  "numbers": {
+   "effective_date": "2026-10-31",
+   "potential_grant": 96
+  },
+  "trap": "בריאות 6.1.2024 – לא דור קודם",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "new-health",
+  "set": "core",
+  "q": "4423 רוצה לבטל",
+  "outcome": "ANSWER_WITH_GAPS",
+  "code": "CANCEL_ESTIMATE",
+  "numbers": {
+   "fee": 50
+  },
+  "trap": "דמי ביטול גבוהים מהמענק",
+  "absent": [
+   "grant",
+   "additional_request"
+  ]
+ },
+ {
+  "id": "arrears",
+  "set": "core",
+  "q": "4412 רוצה לבטל",
+  "outcome": "ANSWER_WITH_GAPS",
+  "code": "CANCEL_ESTIMATE",
+  "numbers": {
+   "arrears": true,
+   "grant": 87,
+   "fee": 0
+  },
+  "trap": "פיגור > 60 יום",
+  "absent": [
+   "conditional_estimate",
+   "additional_request"
+  ]
+ },
+ {
+  "id": "multi-policy",
+  "set": "core",
+  "q": "4418 רוצה לבטל",
+  "outcome": "ANSWER_WITH_GAPS",
+  "code": "CANCEL_ESTIMATE",
+  "numbers": {
+   "multi_policy": true,
+   "conditional_estimate": 474
+  },
+  "trap": "אובדן הנחת ריבוי פוליסות",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "ddmm-date",
+  "set": "core",
+  "q": "4408 רוצה לבטל",
+  "outcome": "ANSWER_WITH_GAPS",
+  "code": "CANCEL_ESTIMATE",
+  "numbers": {
+   "grant": 156,
+   "conditional_estimate": 156
+  },
+  "trap": "תאריך DD/MM",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "ddmm-both",
+  "set": "core",
+  "q": "4421 רוצה לבטל",
+  "outcome": "ANSWER_WITH_GAPS",
+  "code": "CANCEL_ESTIMATE",
+  "numbers": {
+   "grant": 288,
+   "conditional_estimate": 138
+  },
+  "trap": "DD/MM בשני שדות – לא פיגור מדומה",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "car-15pct",
+  "set": "core",
+  "q": "4413 רוצה לבטל",
+  "outcome": "ANSWER_WITH_GAPS",
+  "code": "CANCEL_ESTIMATE",
+  "numbers": {
+   "grant": 630,
+   "conditional_estimate": 480
+  },
+  "trap": "מעל 5 שנים",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "already-cancelled",
+  "set": "core",
+  "q": "4440 רוצה לבטל",
+  "outcome": "ANSWER",
+  "code": "ALREADY_CANCELLED",
+  "trap": "כבר מבוטלת",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "not-found",
+  "set": "core",
+  "q": "4461 רוצה לבטל",
+  "outcome": "CANNOT_ANSWER",
+  "code": "POLICY_NOT_FOUND",
+  "trap": "פוליסה לא קיימת",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "ambiguous-name",
+  "set": "core",
+  "q": "מור שפירא רוצה לבטל",
+  "outcome": "CANNOT_ANSWER",
+  "code": "AMBIGUOUS_CUSTOMER",
+  "trap": "שם זהה לשני לקוחות",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "customer-multi",
+  "set": "core",
+  "q": "C-1072 רוצה לבטל",
+  "outcome": "CANNOT_ANSWER",
+  "code": "MULTIPLE_POLICIES",
+  "trap": "לקוח עם 2 פוליסות",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "customer-product",
+  "set": "core",
+  "q": "C-1072 רוצה לבטל את ביטוח הרכב",
+  "outcome": "ANSWER_WITH_GAPS",
+  "code": "CANCEL_ESTIMATE",
+  "policy": "4418",
+  "trap": "הכרעה לפי מוצר",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "year-not-id",
+  "set": "core",
+  "q": "הלקוח 4471 קנה ב-2023 ורוצה לבטל",
+  "outcome": "ANSWER_WITH_GAPS",
+  "code": "CANCEL_ESTIMATE",
+  "policy": "4471",
+  "trap": "שנה אינה מספר פוליסה",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "comma-id",
+  "set": "core",
+  "q": "פוליסה מספר 4,471 רוצה ביטול",
+  "outcome": "ANSWER_WITH_GAPS",
+  "code": "CANCEL_ESTIMATE",
+  "policy": "4471",
+  "trap": "מספר עם פסיק",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "regulator",
+  "set": "core",
+  "q": "4471 רוצה לבטל ואומר שיגיש תלונה לרשות שוק ההון",
+  "outcome": "ESCALATE",
+  "code": "REGULATOR",
+  "trap": "רגולטור גובר על הכל",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "regulator-short",
+  "set": "core",
+  "q": "4471 רוצה לבטל, ואם לא יסתדר הוא פונה למפקח",
+  "outcome": "ESCALATE",
+  "code": "REGULATOR",
+  "trap": "'מפקח' לבד",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "claim-pay-open",
+  "set": "core",
+  "q": "מתי התביעה של 4425 תשולם?",
+  "outcome": "CANNOT_ANSWER",
+  "code": "CLAIM_PAYMENT_UNKNOWN",
+  "trap": "אין SLA לתשלום – לא להמציא",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "claim-pay-none",
+  "set": "core",
+  "q": "4471 שואל מתי התביעה שלו תשולם",
+  "outcome": "ANSWER",
+  "code": "NO_OPEN_CLAIM",
+  "trap": "אין תביעה",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "claim-status",
+  "set": "core",
+  "q": "מה המצב של התביעה של 4428?",
+  "outcome": "ANSWER_WITH_GAPS",
+  "code": "CLAIM_OPEN_STAGE_UNKNOWN",
+  "trap": "שלב תביעה לא בנתונים",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "claim-docs",
+  "set": "core",
+  "q": "אילו מסמכים צריך לתביעת רכב?",
+  "outcome": "ANSWER",
+  "code": "CLAIM_DOCS",
+  "trap": "שאלה ללא פוליסה",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "refund-timing",
+  "set": "core",
+  "q": "מתי מקבלים את ההחזר אחרי ביטול?",
+  "outcome": "ANSWER",
+  "code": "REFUND_TIMING",
+  "trap": "'ביטול' בשאלה על זמן החזר",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "no-policy",
+  "set": "core",
+  "q": "לקוח רוצה לבטל, מה מגיע לו?",
+  "outcome": "CANNOT_ANSWER",
+  "code": "NO_POLICY",
+  "trap": "חסר מזהה",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "out-of-scope",
+  "set": "core",
+  "q": "מה מזג האוויר מחר?",
+  "outcome": "CANNOT_ANSWER",
+  "code": "OUT_OF_SCOPE",
+  "trap": "מחוץ לתחום",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "regulator-hyphen",
+  "set": "core",
+  "q": "4408 הלקוח יגיש תלונה לרשות שוק-ההון",
+  "outcome": "ESCALATE",
+  "code": "REGULATOR",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "two-policies",
+  "set": "core",
+  "q": "4418 רוצה לבטל וגם 4433",
+  "outcome": "ANSWER_WITH_GAPS",
+  "code": "CANCEL_ESTIMATE",
+  "policy": "4418",
+  "numbers": {
+   "additional_request": true
+  }
+ },
+ {
+  "id": "cancel-and-refund",
+  "set": "core",
+  "q": "4408 רוצה לבטל, מתי יגיע ההחזר?",
+  "outcome": "ANSWER_WITH_GAPS",
+  "code": "CANCEL_ESTIMATE",
+  "policy": "4408",
+  "numbers": {
+   "additional_request": true
+  }
+ },
+ {
+  "id": "inspector-false-positive",
+  "set": "core",
+  "q": "4408 מפקח בנייה אמר שיש נזק, הלקוח רוצה לבטל",
+  "outcome": "ESCALATE",
+  "code": "REGULATOR",
+  "trap": "false positive ידוע (החלטה D4)",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "conflicting-ids",
+  "set": "core",
+  "q": "C-1088 רוצה לבטל את 4418",
+  "outcome": "CANNOT_ANSWER",
+  "code": "CONFLICTING_IDENTIFIERS",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "negation-then-cancel",
+  "set": "core",
+  "q": "4428 לא רוצה לבטל את התביעה אלא לבטל את הביטוח",
+  "outcome": "ESCALATE",
+  "code": "OPEN_CLAIM",
+  "policy": "4428",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "no-letter-id",
+  "set": "core",
+  "q": "A4448 רוצה לבטל",
+  "outcome": "CANNOT_ANSWER",
+  "code": "NO_POLICY",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "hebrew-prefix-id",
+  "set": "core",
+  "q": "בקשת ביטול ל4471",
+  "outcome": "ANSWER_WITH_GAPS",
+  "code": "CANCEL_ESTIMATE",
+  "policy": "4471",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "two-customers",
+  "set": "core",
+  "q": "C-1088 וגם C-1079 רוצים לבטל",
+  "outcome": "CANNOT_ANSWER",
+  "code": "MULTIPLE_CUSTOMERS",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "negation-sentence",
+  "set": "core",
+  "q": "4428 לא רוצה לבטל. את התביעה צריך לבדוק",
+  "outcome": "ANSWER_WITH_GAPS",
+  "code": "CLAIM_OPEN_STAGE_UNKNOWN",
+  "policy": "4428",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "negation-payment",
+  "set": "core",
+  "q": "4428 לא רוצה לבטל את התביעה, רק לדעת מתי ישלמו אותה",
+  "outcome": "CANNOT_ANSWER",
+  "code": "CLAIM_PAYMENT_UNKNOWN",
+  "policy": "4428",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "name-id-conflict",
+  "set": "core",
+  "q": "ניר נחום רוצה לבטל את 4471",
+  "outcome": "CANNOT_ANSWER",
+  "code": "CONFLICTING_IDENTIFIERS",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "customer-letter-id",
+  "set": "core",
+  "q": "C-1088B רוצה לבטל",
+  "outcome": "CANNOT_ANSWER",
+  "code": "NO_POLICY",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "lang-close",
+  "set": "language",
+  "q": "הלקוחה מפוליסה 4471 רוצה לסגור את הביטוח",
+  "outcome": "ANSWER_WITH_GAPS",
+  "code": "CANCEL_ESTIMATE",
+  "trap": "נרדפת: לסגור",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "lang-leave",
+  "set": "language",
+  "q": "4471 רוצה לעזוב אותנו, כמה כסף יחזור אליו?",
+  "outcome": "ANSWER_WITH_GAPS",
+  "code": "CANCEL_ESTIMATE",
+  "trap": "נרדפת: לעזוב",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "lang-stop",
+  "set": "language",
+  "q": "הוא רוצה להפסיק את הביטוח, פוליסה 4418",
+  "outcome": "ANSWER_WITH_GAPS",
+  "code": "CANCEL_ESTIMATE",
+  "trap": "נרדפת: להפסיק",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "lang-exit",
+  "set": "language",
+  "q": "מה קורה אם לקוח 4412 לא שילם ורוצה לצאת?",
+  "outcome": "ANSWER_WITH_GAPS",
+  "code": "CANCEL_ESTIMATE",
+  "trap": "נרדפת: לצאת",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "lang-negation",
+  "set": "language",
+  "q": "הוא לא רוצה לבטל, רק לשאול מה המצב של התביעה של 4428",
+  "outcome": "ANSWER_WITH_GAPS",
+  "code": "CLAIM_OPEN_STAGE_UNKNOWN",
+  "trap": "שלילה",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "lang-general",
+  "set": "language",
+  "q": "תוך כמה זמן אפשר לערער על דחיית תביעה?",
+  "outcome": "ANSWER",
+  "trap": "שאלת מדיניות כללית (30 יום)",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "lang-not-in-policy",
+  "set": "language",
+  "q": "האם הביטוח מכסה נזקי רעידת אדמה?",
+  "outcome": "CANNOT_ANSWER",
+  "code": "NOT_IN_POLICY",
+  "trap": "לא מופיע במדיניות – לא להמציא",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "synonym-cancel-open-claim",
+  "set": "language",
+  "q": "4428 רוצה לסגור את הביטוח, מתי יגיע ההחזר?",
+  "outcome": "ESCALATE",
+  "code": "OPEN_CLAIM",
+  "policy": "4428",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "negation-synonym",
+  "set": "language",
+  "q": "4428 לא רוצה לבטל את התביעה, רוצה לסגור את הביטוח",
+  "outcome": "ESCALATE",
+  "code": "OPEN_CLAIM",
+  "policy": "4428",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "held-out-synonym",
+  "set": "language",
+  "q": "4408 לא מעוניין יותר בביטוח הזה, מה מגיע לו?",
+  "outcome": "ANSWER_WITH_GAPS",
+  "code": "CANCEL_ESTIMATE",
+  "policy": "4408",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "general-fee-question",
+  "set": "language",
+  "q": "כמה דמי ביטול ברכב?",
+  "outcome": "ANSWER",
+  "code": "GENERAL_POLICY",
+  "absent": [
+   "additional_request"
+  ]
+ },
+ {
+  "id": "general-calc-with-id",
+  "set": "language",
+  "q": "4471 לא מבקש לבטל. רק הסבר כללי: איך מחשבים עלות ביטול?",
+  "outcome": "ANSWER",
+  "code": "GENERAL_POLICY",
+  "absent": [
+   "additional_request",
+   "conditional_estimate"
+  ]
+ },
+ {
+  "id": "two-names",
+  "set": "core",
+  "q": "רונן אביטל וניר נחום רוצים לבטל, פוליסה 4471",
+  "outcome": "CANNOT_ANSWER",
+  "code": "CONFLICTING_IDENTIFIERS",
+  "absent": [
+   "additional_request"
+  ]
+ }
+]
