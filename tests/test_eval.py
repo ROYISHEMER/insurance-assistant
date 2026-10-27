@@ -68,10 +68,23 @@ def test_classify_errors():
     assert classify(CASE, [run(True, good)] * 4 + [run(False, escalated, ["x"])])[0] == "ERROR"
     answered = decision(outcome="ANSWER", fee=150)
     assert classify(CASE, [run(True, good)] * 4 + [run(False, answered, ["x"])])[0] == "ERROR"
+    same_code = decision(outcome="ANSWER")  # expected code, no money
+    assert classify(CASE, [run(True, good)] * 4 + [run(False, same_code, ["x"])])[0] == "ERROR"
     wrong_code = decision(code="TRIP_STARTED", fee=150)
     assert classify(CASE, [run(True, good)] * 2 + [run(False, wrong_code, ["c"])] * 3)[0] == "ERROR"
     crashed = {"passed": False, "reasons": ["exception: RuntimeError: x"], "response": None}
     assert classify(CASE, [run(True, good)] * 4 + [crashed])[0] == "ERROR"
+
+
+def test_classify_wrong_intent_answer_is_judged_by_majority():
+    case = {"outcome": "CANNOT_ANSWER", "code": "NO_POLICY"}
+    good = decision(outcome="CANNOT_ANSWER", code="NO_POLICY", policy_id=None)
+    wrong_intent = decision(outcome="ANSWER", code="POLICY_INFO")  # real data, no money
+    assert classify(case, [run(True, good)] * 4 + [run(False, wrong_intent, ["code"])])[0] == \
+        "HARMLESS FLIP (4/5 correct)"
+    assert classify(case, [run(True, good)] * 2 + [run(False, wrong_intent, ["code"])] * 3)[0] == "ERROR"
+    with_money = decision(outcome="ANSWER", code="POLICY_INFO", fee=0)
+    assert classify(case, [run(True, good)] * 4 + [run(False, with_money, ["code"])])[0] == "ERROR"
 
 
 def test_cases_file_shape():

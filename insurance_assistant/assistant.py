@@ -26,9 +26,12 @@ Answer in Hebrew, briefly, ONLY from the procedure documents below. Documents ma
 (04_חריגים.md) take precedence over the others.
 Cite every statement as <file name> §<section>, e.g. (01_תנאי_ביטול.md §3).
 Do not calculate amounts or dates for a specific customer and do not add numbers that are not in the documents.
-If the answer is not in the documents, reply exactly: לא מופיע במדיניות"""
+If the answer is not in the documents, reply exactly: לא מופיע במדיניות
+Keep the answer under 120 words."""
 NOT_IN_POLICY = "לא מופיע במדיניות"
 GENERAL_TIMEOUT = 8.0
+# Thinking tokens count toward max_tokens (SDK 2.3.0 docs); 1024 truncated a live Hebrew answer.
+GENERAL_MAX_TOKENS = 4096
 
 LABELS = {
     Outcome.ANSWER: "תשובה",
@@ -167,7 +170,7 @@ def general_answer(question: str, llm, policies_dir: str | Path, policy_id: str 
     corpus = "\n\n".join(f"=== {name} ===\n{text}" for name, text in docs.items())
     try:
         answer_text = llm.complete(GENERAL_SYSTEM_PROMPT + "\n\n" + corpus, question,
-                                   max_tokens=1024, timeout=GENERAL_TIMEOUT)
+                                   max_tokens=GENERAL_MAX_TOKENS, timeout=GENERAL_TIMEOUT)
     except LLMError as exc:
         print(f"LLM error: {exc}", file=sys.stderr)  # never into the decision or the text
         return _cannot(intent, "LLM_UNAVAILABLE", "שירות השפה אינו זמין כרגע",

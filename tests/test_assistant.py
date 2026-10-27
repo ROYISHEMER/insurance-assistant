@@ -242,7 +242,10 @@ def test_general_question_with_policy(repo):
     second = llm.calls[1]
     assert second["system"].startswith(GENERAL_SYSTEM_PROMPT + "\n\n")
     assert "## 6. פוליסה עם תביעה פתוחה" in second["system"] and "## ה. פניות רגולטור" in second["system"]
-    assert second["timeout"] == 8.0 and second["max_tokens"] == 1024
+    assert second["timeout"] == 8.0 and second["max_tokens"] == 4096
+    assert second["system"].startswith(GENERAL_SYSTEM_PROMPT) and GENERAL_SYSTEM_PROMPT.endswith(
+        "\nKeep the answer under 120 words.")
+    assert llm.calls[0]["max_tokens"] == 1024
 
 
 def test_general_answer_cites_verbatim_subsection(repo):
