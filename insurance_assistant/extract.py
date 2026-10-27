@@ -178,7 +178,6 @@ class Signals:
     owed: bool = False
     cancel: bool = False
     cancel_keyword_raw: bool = False
-    negated_cancel: bool = False
     escalation_only_cancel: bool = False
 
     @property
@@ -200,7 +199,6 @@ def keyword_signals(text: str) -> Signals:
         owed="מגיע לו" in stripped or "מגיע לה" in stripped,
         cancel=_has_cancel_word(_NON_POLICY_CANCEL.sub(" ", _CANCEL_CONTEXT.sub(" ", stripped))),
         cancel_keyword_raw=corrected or _has_cancel_word(stripped),
-        negated_cancel=bool(negations),
         escalation_only_cancel=corrected,
     )
 

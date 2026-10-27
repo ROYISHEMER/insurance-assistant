@@ -83,7 +83,7 @@ def test_regulator_inflection_escalates(repo):
 
 def test_refund_after_negated_cancel_is_not_cancellation(repo):
     s = keyword_signals("4413 לא רוצה לבטל את הפוליסה, מבקש החזר בגלל חיוב כפול")
-    assert s.negated_cancel and s.refund and keyword_intents(s) == (Intent.UNKNOWN, [])
+    assert s.refund and keyword_intents(s) == (Intent.UNKNOWN, [])
     d = answer("4413 לא רוצה לבטל את הפוליסה, מבקש החזר בגלל חיוב כפול", repo).decision
     assert d.code == "UNCLEAR_REQUEST" and no_money(d)
 
