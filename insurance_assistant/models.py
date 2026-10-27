@@ -65,3 +65,6 @@ class Decision:
     warnings: list[str] = field(default_factory=list)
     say_to_customer: list[str] = field(default_factory=list)
     numbers: dict = field(default_factory=dict)
+
+
+DEFAULT_AS_OF = date(2026, 10, 25)  # the CSV export date; never today's date
