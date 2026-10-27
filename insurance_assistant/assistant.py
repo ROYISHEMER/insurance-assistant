@@ -10,16 +10,17 @@ from datetime import date
 from functools import lru_cache
 from pathlib import Path
 
-from .extract import Extraction, extract
+from .extract import Extraction, extract, normalize_question
 from .grounding import currency_amounts, numbers_in, ungrounded_numbers
+from .guardrails import mentions_regulator
 from .llm import LLMError
 from .models import DEFAULT_AS_OF, Decision, Fact, Intent, Outcome, Policy
 from .policy_docs import PROJECT_ROOT, load_policy_docs, split_sections
-from .repository import PolicyRepository, ValidatedPolicyRepository
+from .repository import PolicyRepository, RepositoryUnavailable, ValidatedPolicyRepository
 from .rules.cancellation import claims_escalation, evaluate_cancellation, has_open_or_unknown_claims
 from .rules.claims import claim_documents, claim_payment_date, claim_status, policy_info, refund_timing
-from .textnorm import normalize_unicode
 from .rules.common import CANCEL, EXCEPTIONS, REFUNDS, data_source, start_decision
+from .textnorm import normalize_unicode
 
 GENERAL_SYSTEM_PROMPT = """\
 You answer insurance call-center reps' general questions about company procedures.
@@ -255,9 +256,9 @@ def render(d: Decision) -> str:
 
 # --- the pipeline ---------------------------------------------------------------------------------
 
-def _regulator(ex: Extraction) -> Decision:
-    d = Decision(Outcome.ESCALATE, ex.primary_intent, "REGULATOR",
-                 "הלקוח הזכיר פנייה לרגולטור – העברה מיידית למנהל משמרת", policy_id=ex.policy_id)
+def _regulator(intent: Intent, policy_id: str | None) -> Decision:
+    d = Decision(Outcome.ESCALATE, intent, "REGULATOR",
+                 "הלקוח הזכיר פנייה לרגולטור – העברה מיידית למנהל משמרת", policy_id=policy_id)
     d.facts.append(Fact("פנייה שבה הלקוח מזכיר תלונה לרשות שוק ההון",
                         "מועברת מיידית למנהל המשמרת, ללא מתן תשובה עניינית על ידי הנציג", f"{EXCEPTIONS} §ה"))
     d.warnings.append(f"אין לתת תשובה עניינית ({EXCEPTIONS} §ה)")
@@ -296,7 +297,7 @@ def _dispatch(intent: Intent, policy: Policy | None, ex: Extraction, question: s
 def _decide(question: str, ex: Extraction, repo, llm, as_of: date, policies_dir) -> tuple[Decision, list[str]]:
     path: list[str] = []
     if ex.regulator:
-        return _regulator(ex), ["guardrail:regulator"]
+        return _regulator(ex.primary_intent, ex.policy_id), ["guardrail:regulator"]
 
     policy, problem = _resolve(ex, repo)
     if problem is not None:
@@ -342,10 +343,17 @@ def _numbers_are_finite(numbers: dict) -> bool:
     return all(not (isinstance(v, float) and not math.isfinite(v)) for v in numbers.values())
 
 
-def answer(question: str, repo: PolicyRepository, llm=None, as_of: date = DEFAULT_AS_OF,
-           policies_dir: str | Path = "data/policies") -> Response:
-    started = time.perf_counter()
-    repo = ValidatedPolicyRepository(repo)
+def _source_unavailable(question: str) -> tuple[Decision, list[str]]:
+    # The regulator rule still wins: it needs no policy data.
+    if mentions_regulator(normalize_question(question)):
+        return _regulator(Intent.UNKNOWN, None), ["guardrail:regulator"]
+    d = Decision(Outcome.CANNOT_ANSWER, Intent.UNKNOWN, "DATA_SOURCE_UNAVAILABLE",
+                 "מערכת הפוליסות לא זמינה כרגע – לא ניתן לענות על שאלה על פוליסה")
+    d.missing.append("נתוני הפוליסה – יש לנסות שוב בעוד רגע")
+    return d, ["data_source:unavailable"]
+
+
+def _run(question: str, repo, llm, as_of: date, policies_dir) -> tuple[Decision, list[str], Extraction]:
     ex = extract(question, repo, llm)
     path = [f"intent:{ex.primary_intent.value}({ex.via})"]
 
@@ -374,10 +382,24 @@ def answer(question: str, repo: PolicyRepository, llm=None, as_of: date = DEFAUL
             d.warnings.append(f"לא ידוע אם לפוליסה תביעה פתוחה – אם הלקוח מבקש לבטל, יש להעביר למנהל משמרת ({CANCEL} §6).")
         elif policy is not None and policy.open_claims != 0:
             d.warnings.append(f"לפוליסה תביעה פתוחה – אם הלקוח מבקש לבטל, יש להעביר למנהל משמרת ({CANCEL} §6).")
+    return d, path, ex
+
+
+def answer(question: str, repo: PolicyRepository, llm=None, as_of: date = DEFAULT_AS_OF,
+           policies_dir: str | Path = "data/policies") -> Response:
+    started = time.perf_counter()
+    repo = ValidatedPolicyRepository(repo)
+    try:
+        d, path, ex = _run(question, repo, llm, as_of, policies_dir)
+    except RepositoryUnavailable as exc:
+        # Unavailable is never "not found". The technical detail goes to stderr only.
+        print(f"Policy data source unavailable: {exc}", file=sys.stderr)
+        d, path = _source_unavailable(question)
+        ex = None
 
     if d.code == "LLM_UNAVAILABLE":
         banner = BANNER_LLM_UNAVAILABLE
-    elif ex.llm_failed:
+    elif ex is not None and ex.llm_failed:
         banner = BANNER_KEYWORDS
     else:
         banner = None

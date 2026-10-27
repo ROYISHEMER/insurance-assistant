@@ -1,8 +1,10 @@
-"""Command line: python -m insurance_assistant.cli ["question"] [--as-of YYYY-MM-DD] [--no-llm] [--debug] [--report]"""
+"""Command line: python -m insurance_assistant.cli ["question"] [--as-of YYYY-MM-DD] [--no-llm] [--debug]
+[--report] [--source csv|api] [--api-url URL]"""
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from dataclasses import asdict
@@ -10,6 +12,7 @@ from datetime import date
 from enum import Enum
 from pathlib import Path
 
+from .api_repository import ApiPolicyRepository
 from .assistant import answer
 from .llm import get_llm
 from .models import DEFAULT_AS_OF, StartupError
@@ -42,6 +45,16 @@ def load_sources(csv_path: str | Path = "data/policies.csv",
     return CsvPolicyRepository(csv_path)
 
 
+def load_api_source(api_url: str | None, policies_dir: str | Path = DEFAULT_DOCS_DIR) -> ApiPolicyRepository:
+    """Startup for --source api: the document checks still run; the CSV checks are skipped."""
+    check_policy_docs(policies_dir)
+    if not api_url or not api_url.strip():
+        raise StartupError("עם --source api יש לציין --api-url או את משתנה הסביבה POLICY_API_URL")
+    if not re.match(r"https?://\S+$", api_url.strip()):
+        raise StartupError(f"כתובת ה-API אינה תקינה: '{api_url}' (נדרש http:// או https://)")
+    return ApiPolicyRepository(api_url.strip())
+
+
 def _json_default(value):
     if isinstance(value, Enum):
         return value.value
@@ -67,11 +80,18 @@ def main(argv: list[str] | None = None, csv_path: str | Path = "data/policies.cs
     parser.add_argument("--no-llm", action="store_true")
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--report", action="store_true")
+    parser.add_argument("--source", choices=("csv", "api"), default="csv")
+    parser.add_argument("--api-url", help="policy API base URL (or env POLICY_API_URL)")
     args = parser.parse_args(argv)
 
     try:
         as_of = parse_as_of(args.as_of)
-        repo = load_sources(csv_path, policies_dir)
+        if args.source == "api":
+            if args.report:
+                raise StartupError("--report זמין רק עם --source csv")
+            repo = load_api_source(args.api_url or os.environ.get("POLICY_API_URL"), policies_dir)
+        else:
+            repo = load_sources(csv_path, policies_dir)
     except StartupError as exc:
         print(f"שגיאה: {exc}", file=sys.stderr)
         return 1

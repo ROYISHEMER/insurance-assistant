@@ -153,6 +153,29 @@ def validate_policy(policy: Policy, source_name: str) -> Policy:
     )
 
 
+class RepositoryUnavailable(Exception):
+    """The data source could not answer (timeout, error, malformed response). Never means "not found"."""
+
+
+def policy_from_values(values: dict[str, str], source_name: str) -> Policy:
+    """Raw text values by CSV column name -> a validated Policy. Every source goes through these parsers."""
+    issues: list[str] = []
+    policy = Policy(
+        policy_id=values["policy_id"].strip(),
+        customer_id=values["customer_id"],
+        customer_name=values["customer_name"],
+        product=values["product"],
+        start_date=parse_date(values["start_date"], "start_date", issues),
+        monthly_premium=parse_float(values["monthly_premium"], "monthly_premium", issues),
+        status=values["status"],
+        last_payment_date=parse_date(values["last_payment_date"], "last_payment_date", issues),
+        open_claims=parse_int(values["open_claims"], "open_claims", issues),
+        notes=values.get("notes", ""),
+        data_issues=issues,
+    )
+    return validate_policy(policy, source_name)
+
+
 class ValidatedPolicyRepository:
     """Wraps any repository so that every policy it returns has been validated."""
 
@@ -305,21 +328,7 @@ class CsvPolicyRepository:
         if not policy_id:
             self._skipped.append({"row": row_number, "reason": "מספר פוליסה ריק"})
             return
-        issues: list[str] = []
-        policy = Policy(
-            policy_id=policy_id,
-            customer_id=values["customer_id"],
-            customer_name=values["customer_name"],
-            product=values["product"],
-            start_date=parse_date(values["start_date"], "start_date", issues),
-            monthly_premium=parse_float(values["monthly_premium"], "monthly_premium", issues),
-            status=values["status"],
-            last_payment_date=parse_date(values["last_payment_date"], "last_payment_date", issues),
-            open_claims=parse_int(values["open_claims"], "open_claims", issues),
-            notes=values.get("notes", ""),
-            data_issues=issues,
-        )
-        self._rows.append((row_number, validate_policy(policy, self.source_name)))
+        self._rows.append((row_number, policy_from_values(values, self.source_name)))
 
     def _mark_conflicts(self) -> None:
         rows_by_id: dict[str, list[int]] = defaultdict(list)
