@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 
 from .grounding import CURRENCY
 from .guardrails import mentions_regulator
+from .textnorm import normalize_unicode
 from .llm import LLMError
 from .models import Intent
 from .repository import PolicyRepository
@@ -17,12 +18,12 @@ _DIGITS = str.maketrans(
     {**{chr(0x0660 + i): str(i) for i in range(10)}, **{chr(0x06F0 + i): str(i) for i in range(10)}}
 )
 _THOUSANDS = re.compile(r"(?<=\d),(?=\d{3}(?!\d))")
-_DIGIT_DASH = re.compile(r"(?<=\d)[\u05be\u2013\u2014\u2212](?=\d)")  # maqaf, en/em dash, minus sign
 
 
 def normalize_question(question: str) -> str:
-    """Arabic-Indic and Persian digits -> 0-9; drop a thousands comma; a dash between digits -> "-"."""
-    return _DIGIT_DASH.sub("-", _THOUSANDS.sub("", question.translate(_DIGITS)))
+    """The single normalization before any matching: Unicode whitespace -> one space, every dash -> "-",
+    Arabic-Indic and Persian digits -> 0-9, a thousands comma between digits dropped."""
+    return _THOUSANDS.sub("", normalize_unicode(question).translate(_DIGITS))
 
 
 # --- identifiers -------------------------------------------------------------------
@@ -30,15 +31,20 @@ def normalize_question(question: str) -> str:
 _CUSTOMER_ID = re.compile(r"(?<![A-Za-z0-9])[Cc]-?(\d{4})(?![\dA-Za-z])")
 # A Latin letter touching the number (A4448, 4448B, XC-1088) means it is not a policy id;
 # Hebrew prefix letters glued before it (ל4471, ב4471, ...) are fine.
-# Part of a hyphenated digit group (a phone number like 050-4471-123) is not a policy id either.
-_POLICY_ID = re.compile(r"(?<![\dA-Za-z])(?<![A-Za-z]-)(?<!\d-)\d{4}(?![\dA-Za-z])(?!-\d)")
+# Part of a hyphenated digit group, with or without spaces around the hyphen (050-4471-123,
+# "050 - 4413 - 123"), is not a policy id either.
+_POLICY_ID = re.compile(
+    r"(?<![\dA-Za-z])(?<![A-Za-z]-)(?<!\d-)(?<!\d -)(?<!\d- )(?<!\d - )\d{4}(?![\dA-Za-z])(?! ?- ?\d)"
+)
 _YEARS = range(1900, 2101)
-_PREFIX = r"(?<![א-ת])ו?ש?[הבלמכ]?"
+# Any run of prefix letters before the word ("וכשהדירה"); the word must end at a word boundary.
+_PREFIX = r"(?<![^\W\d_])[ושהבלמכ]*"
+_WORD_END = r"(?![^\W\d_])(?!-[^\W\d_])"
 _PRODUCTS = {
-    "רכב": re.compile(_PREFIX + r"רכב(?![א-ת])"),
-    "דירה": re.compile(_PREFIX + r"דירה(?![א-ת])"),
-    "בריאות": re.compile(_PREFIX + r"בריאות(?![א-ת])"),
-    "נסיעות": re.compile(_PREFIX + r"(?:נסיעות|נסיעה|חו\"ל|חו״ל)(?![א-ת])"),
+    "רכב": re.compile(_PREFIX + r"רכב" + _WORD_END),
+    "דירה": re.compile(_PREFIX + r"דירה" + _WORD_END),
+    "בריאות": re.compile(_PREFIX + r"בריאות" + _WORD_END),
+    "נסיעות": re.compile(_PREFIX + r"(?:נסיעות|נסיעה|חו\"ל|חו״ל)" + _WORD_END),
 }
 
 
@@ -64,13 +70,11 @@ def _is_amount(text: str, match: re.Match) -> bool:
 
 
 def name_appears_in(name: str, text: str) -> bool:
-    """The full name, preceded by a non-letter or up to two prefix letters, and not followed by a letter
-    or by a dash and a letter ("מזרחי-פרץ" is a different surname)."""
+    """The full name, after any run of prefix letters, not followed by a letter or by a dash and a letter
+    ("מזרחי-פרץ" is a different surname)."""
     if not name:
         return False
-    pattern = (r"(?<![^\W\d_])[ושהבלמכ]{0,2}" + re.escape(name)
-               + r"(?![^\W\d_])(?![-\u05be\u2013\u2014][^\W\d_])")
-    return re.search(pattern, text) is not None
+    return re.search(_PREFIX + re.escape(name) + _WORD_END, normalize_unicode(text)) is not None
 
 
 def _unique(items: list[str]) -> list[str]:
@@ -116,6 +120,10 @@ _NEGATED_VERB = re.compile(
 )
 _NEGATED_CANCEL = re.compile(r"(?<![א-ת])ו?לא\s+לבטל(?![א-ת])")
 _CANCEL_CONTEXT = re.compile(r"(?:אחרי|לאחר|דמי|תנאי|מדיניות|עלות)\s+ה?ביטול")
+# A cancellation verb whose object is not the policy: a standing order, a charge, a payment, a card, a claim.
+_NON_POLICY_CANCEL = re.compile(
+    r"[^\s.,;?!]*(?:בטל|ביטול)[^\s.,;?!]*\s+(?:את\s+)?ה?(?:הוראת\s+ה?קבע|הו\"ק|חיוב|תשלום|כרטיס|תביע)\S*"
+)
 _WHEN = ("מתי", "תוך כמה", "כמה זמן")
 _PAID = ("ישולם", "תשולם", "שולם", "ישלמו", "משלמים", "תשלום", "הכסף")
 
@@ -181,7 +189,7 @@ def keyword_signals(text: str) -> Signals:
         documents="מסמכ" in stripped,
         details="פרטי" in stripped or "סטטוס" in stripped,
         owed="מגיע לו" in stripped or "מגיע לה" in stripped,
-        cancel=_has_cancel_word(_CANCEL_CONTEXT.sub(" ", stripped)),
+        cancel=_has_cancel_word(_NON_POLICY_CANCEL.sub(" ", _CANCEL_CONTEXT.sub(" ", stripped))),
         cancel_keyword_raw=corrected or _has_cancel_word(stripped),
         negated_cancel=bool(negations),
         escalation_only_cancel=corrected,
@@ -209,9 +217,6 @@ def keyword_intents(s: Signals) -> tuple[Intent, list[Intent]]:
         return Intent.CANCELLATION, [other] if other else []
     if other:
         return other, []
-    # "החזר" / "מגיע לו" mean cancellation only if the rep did not just say the customer is NOT cancelling.
-    if (s.owed or s.refund) and not s.negated_cancel:
-        return Intent.CANCELLATION, []
     if s.details:
         return Intent.POLICY_INFO, []
     return Intent.UNKNOWN, []

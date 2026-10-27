@@ -281,8 +281,8 @@ def test_keyword_evidence():
     ("מתי יגיע ההחזר", REFUND, []),
     ("אילו מסמכים לתביעה", DOCS, []),  # documents before claim_status
     ("מה מצב התביעה", STATUS, []),
-    ("מה מגיע לו", C, []),
-    ("כמה החזר יקבל", C, []),
+    ("מה מגיע לו", UNKNOWN, []),  # phase 7c: cancellation only from an explicit verb
+    ("כמה החזר יקבל", UNKNOWN, []),
     ("פרטי הפוליסה", INFO, []),
     ("שלום", UNKNOWN, []),
 ])

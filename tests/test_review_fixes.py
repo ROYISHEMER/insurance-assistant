@@ -88,8 +88,8 @@ def test_refund_after_negated_cancel_is_not_cancellation(repo):
     assert d.code == "UNCLEAR_REQUEST" and no_money(d)
 
 
-def test_refund_alone_still_defaults_to_cancellation():
-    assert keyword_intents(keyword_signals("כמה החזר יקבל"))[0] is Intent.CANCELLATION
+def test_refund_alone_is_not_cancellation():  # phase 7c: no fallback default to cancellation
+    assert keyword_intents(keyword_signals("כמה החזר יקבל"))[0] is Intent.UNKNOWN
     assert keyword_intents(keyword_signals("ולא לבטל, מה מגיע לו"))[0] is Intent.UNKNOWN
 
 
@@ -145,7 +145,7 @@ def test_year_next_to_known_id_is_ignored(repo):
 # --- A6: names on word boundaries --------------------------------------------------------------------------------
 
 @pytest.mark.parametrize("text,found", [
-    ("רונן אביטל רוצה לבטל", True), ("לרונן אביטל", True), ("ושלרונן אביטל", False), ("ולרונן אביטל", True),
+    ("רונן אביטל רוצה לבטל", True), ("לרונן אביטל", True), ("ושלרונן אביטל", True), ("ולרונן אביטל", True),
     ("(רונן אביטל)", True), ("רונן אביטלמן רוצה לבטל", False), ("ארונן אביטל", False), ("Xרונן אביטל", False),
 ])
 def test_name_appears_in(text, found):

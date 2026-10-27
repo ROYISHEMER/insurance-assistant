@@ -407,12 +407,12 @@
   "id": "two-policies",
   "set": "core",
   "q": "4418 רוצה לבטל וגם 4433",
-  "outcome": "ANSWER_WITH_GAPS",
-  "code": "CANCEL_ESTIMATE",
-  "policy": "4418",
-  "numbers": {
-   "additional_request": true
-  }
+  "outcome": "CANNOT_ANSWER",
+  "code": "MULTIPLE_POLICIES",
+  "absent": [
+   "additional_request",
+   "conditional_estimate"
+  ]
  },
  {
   "id": "cancel-and-refund",
@@ -784,6 +784,61 @@
   "id": "excluded-product",
   "set": "core",
   "q": "C-1088 רוצה לבטל את הדירה ולא את הרכב",
+  "outcome": "CANNOT_ANSWER",
+  "code": "PRODUCT_MISMATCH",
+  "absent": [
+   "additional_request",
+   "conditional_estimate"
+  ]
+ },
+ {
+  "id": "policy-correction",
+  "set": "core",
+  "q": "C-1072 לא את 4418; הוא רוצה לבטל את 4433",
+  "outcome": "CANNOT_ANSWER",
+  "code": "MULTIPLE_POLICIES",
+  "absent": [
+   "additional_request",
+   "conditional_estimate"
+  ]
+ },
+ {
+  "id": "currency-nbsp",
+  "set": "core",
+  "q": "לקוח רוצה לבטל; שילם 4413 ₪",
+  "outcome": "CANNOT_ANSWER",
+  "code": "NO_POLICY",
+  "absent": [
+   "additional_request",
+   "conditional_estimate"
+  ]
+ },
+ {
+  "id": "phone-spaced-hyphens",
+  "set": "core",
+  "q": "טלפון 050 - 4413 - 123, הלקוח רוצה לבטל",
+  "outcome": "CANNOT_ANSWER",
+  "code": "NO_POLICY",
+  "absent": [
+   "additional_request",
+   "conditional_estimate"
+  ]
+ },
+ {
+  "id": "surname-nb-hyphen",
+  "set": "core",
+  "q": "גיל אזולאי‑כהן רוצה לבטל",
+  "outcome": "CANNOT_ANSWER",
+  "code": "NO_POLICY",
+  "absent": [
+   "additional_request",
+   "conditional_estimate"
+  ]
+ },
+ {
+  "id": "product-many-prefixes",
+  "set": "core",
+  "q": "C-1088 רוצה לבטל וכשהדירה תבוטל תעדכנו אותי",
   "outcome": "CANNOT_ANSWER",
   "code": "PRODUCT_MISMATCH",
   "absent": [

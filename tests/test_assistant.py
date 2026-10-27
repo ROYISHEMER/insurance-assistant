@@ -318,10 +318,10 @@ def test_additional_secondary_intent(repo):
     assert any("סטטוס תביעה" in w for w in d.warnings)
 
 
-def test_additional_other_policy(repo):
+def test_two_policy_ids_ask_which_one(repo):  # phase 7c: replaces "answer the first, warn about the second"
     d = ask(repo, "4418 ו-4433 רוצה לבטל").decision
-    assert d.policy_id == "4418" and d.numbers["additional_request"] is True
-    assert any("4433" in w for w in d.warnings)
+    assert (d.outcome, d.code, d.policy_id) == (Outcome.CANNOT_ANSWER, "MULTIPLE_POLICIES", None)
+    assert {f.label for f in d.facts} == {"פוליסה 4418", "פוליסה 4433"} and d.numbers == {}
 
 
 def test_additional_request_not_flagged_on_escalation(repo):

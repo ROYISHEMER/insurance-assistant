@@ -129,8 +129,8 @@ def test_dashes_between_digits_become_hyphens(repo, text):
     assert e.policy_id is None and e.unknown_policy_id is None
 
 
-def test_maqaf_between_words_is_untouched():
-    assert normalize_question("שוק־ההון ו־4471") == "שוק־ההון ו־4471"
+def test_maqaf_between_words_becomes_hyphen():  # phase 7c: one normalization for every dash
+    assert normalize_question("שוק־ההון ו־4471") == "שוק-ההון ו-4471"
 
 
 @pytest.mark.parametrize("text", ["NIS 4471", 'ש"ח 4471', "ש״ח 4471", "4471 nis", "4471 NIS", "₪ 4471", "4471שקל"])
@@ -139,8 +139,9 @@ def test_currency_tokens_mark_amounts(repo, text):
     assert e.policy_id is None and e.unknown_policy_id is None
 
 
-def test_two_spaces_before_currency_is_not_an_amount(repo):
-    assert extract("פוליסה 4471  ₪", repo).policy_id == "4471"
+def test_any_whitespace_before_currency_is_an_amount(repo):  # phase 7c
+    e = extract("פוליסה 4471  ₪", repo)
+    assert e.policy_id is None and e.unknown_policy_id is None
 
 
 @pytest.mark.parametrize("question", ["טלפון 050־4471־123, הלקוח רוצה לבטל", "לקוח רוצה לבטל; החיוב שלו NIS 4471"])

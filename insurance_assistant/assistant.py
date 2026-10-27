@@ -18,6 +18,7 @@ from .policy_docs import PROJECT_ROOT, load_policy_docs, split_sections
 from .repository import PolicyRepository, ValidatedPolicyRepository
 from .rules.cancellation import claims_escalation, evaluate_cancellation, has_open_or_unknown_claims
 from .rules.claims import claim_documents, claim_payment_date, claim_status, policy_info, refund_timing
+from .textnorm import normalize_unicode
 from .rules.common import CANCEL, EXCEPTIONS, REFUNDS, data_source, start_decision
 
 GENERAL_SYSTEM_PROMPT = """\
@@ -129,6 +130,12 @@ def _resolve(ex: Extraction, repo: PolicyRepository) -> tuple[Policy | None, Dec
             missing = (f"יש לוודא מול הלקוח איזה מספר הוא מספר הפוליסה: {ex.unknown_policy_id} לא נמצא, "
                        f"{known[0].policy_id} קיים")
         return None, _cannot(intent, "POLICY_NOT_FOUND", f"פוליסה {ex.unknown_policy_id} לא נמצאה", missing)
+    if len(known) > 1:
+        # Never compute amounts for one of two policies: the first may be the one the customer excluded
+        # ("C-1072 לא את 4418; הוא רוצה לבטל את 4433").
+        d = _cannot(intent, "MULTIPLE_POLICIES", "בשאלה כמה מספרי פוליסה – יש לברר לאיזו פוליסה הלקוח מתכוון",
+                    "מספר הפוליסה שהלקוח מתכוון אליה")
+        return None, _list_policies(d, known)
     if known:
         return known[0], None
     if customer_ids:
@@ -187,6 +194,7 @@ def general_answer(question: str, llm, policies_dir: str | Path, policy_id: str 
         return _cannot(intent, "LLM_UNAVAILABLE", "שירות השפה אינו זמין כרגע",
                        "נסה שוב בעוד רגע, או בדוק ישירות במסמכי המדיניות", policy_id=policy_id)
 
+    answer_text = normalize_unicode(answer_text)
     if NOT_IN_POLICY in answer_text:
         return _cannot(intent, "NOT_IN_POLICY", "התשובה אינה מופיעה במסמכי המדיניות", policy_id=policy_id)
 
@@ -351,7 +359,9 @@ def answer(question: str, repo: PolicyRepository, llm=None, as_of: date = DEFAUL
         path.append("calculation_error")
 
     if d.code not in ("MULTIPLE_CUSTOMERS", "CONFLICTING_IDENTIFIERS"):
-        extra = [f"השאלה מזכירה גם את פוליסה {pid} – יש לטפל בה בנפרד" for pid in ex.other_policy_ids]
+        # With MULTIPLE_POLICIES every mentioned policy is already listed for the rep to choose from.
+        other_ids = [] if d.code == "MULTIPLE_POLICIES" else ex.other_policy_ids
+        extra = [f"השאלה מזכירה גם את פוליסה {pid} – יש לטפל בה בנפרד" for pid in other_ids]
         extra += [f"זוהתה בקשה נוספת: {INTENT_NAMES[i]} – יש לטפל בה בנפרד"
                   for i in ex.secondary_intents if i is not d.intent]
         d.warnings += extra
