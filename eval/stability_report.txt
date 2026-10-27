@@ -46,7 +46,20 @@ STABLE-CORRECT               customer-letter-id [core]
 STABLE-CORRECT               lang-close [language]
 STABLE-CORRECT               lang-leave [language]
 STABLE-CORRECT               lang-stop [language]
-STABLE-CORRECT               lang-exit [language]
+HARMLESS FLIP (4/5 correct)  lang-exit [language]
+    run 1: intent:cancellation(llm) → policy:4412 → rules:cancellation → template | ok
+      ! הלקוח בפיגור (145 ימים מהתשלום האחרון): החוב שנצבר מקוזז מכל החזר, ואם החוב גדול מההחזר – הפניה למחלקת גבייה להסדר (01_תנאי_ביטול.md §5)
+      ! יש לשאול את הלקוח אם הפוליסה הוקפאה אי פעם: הוותק, דמי הביטול ומענק הוותק מניחים שלא הייתה הקפאה (04_חריגים.md §ד)
+    run 2: intent:cancellation(llm) → policy:4412 → rules:cancellation → template | ok
+      ! הלקוח בפיגור (145 ימים מהתשלום האחרון): החוב שנצבר מקוזז מכל החזר, ואם החוב גדול מההחזר – הפניה למחלקת גבייה להסדר (01_תנאי_ביטול.md §5)
+      ! יש לשאול את הלקוח אם הפוליסה הוקפאה אי פעם: הוותק, דמי הביטול ומענק הוותק מניחים שלא הייתה הקפאה (04_חריגים.md §ד)
+    run 3: intent:cancellation(llm) → policy:4412 → rules:cancellation → template | ok
+      ! הלקוח בפיגור (145 ימים מהתשלום האחרון): החוב שנצבר מקוזז מכל החזר, ואם החוב גדול מההחזר – הפניה למחלקת גבייה להסדר (01_תנאי_ביטול.md §5)
+      ! יש לשאול את הלקוח אם הפוליסה הוקפאה אי פעם: הוותק, דמי הביטול ומענק הוותק מניחים שלא הייתה הקפאה (04_חריגים.md §ד)
+    run 4: intent:cancellation(llm) → policy:4412 → rules:cancellation → template | ok
+      ! הלקוח בפיגור (145 ימים מהתשלום האחרון): החוב שנצבר מקוזז מכל החזר, ואם החוב גדול מההחזר – הפניה למחלקת גבייה להסדר (01_תנאי_ביטול.md §5)
+      ! יש לשאול את הלקוח אם הפוליסה הוקפאה אי פעם: הוותק, דמי הביטול ומענק הוותק מניחים שלא הייתה הקפאה (04_חריגים.md §ד)
+    run 5: intent:policy_info(llm) → policy:4412 → rules:policy_info → template | outcome ANSWER ≠ ANSWER_WITH_GAPS; code POLICY_INFO ≠ CANCEL_ESTIMATE
 STABLE-CORRECT               lang-negation [language]
 STABLE-CORRECT               lang-general [language]
 STABLE-CORRECT               lang-not-in-policy [language]
@@ -89,4 +102,4 @@ Adversarial questions:
   OK     לקוח 4425 רוצה לבטל אחרת יתלונן
     ESCALATE OPEN_CLAIM | intent:cancellation(llm) → policy:4425 → rules:cancellation → template
 
-Summary (5 runs per case): {'STABLE-CORRECT': 73, 'HARMLESS FLIP': 0, 'ERROR': 0} | adversarial errors: 0
+Summary (5 runs per case): {'STABLE-CORRECT': 72, 'HARMLESS FLIP': 1, 'ERROR': 0} | adversarial errors: 0
