@@ -29,7 +29,8 @@ Answer in Hebrew, briefly, ONLY from the procedure documents below. Documents ma
 Cite every statement as <file name> §<section>, e.g. (01_תנאי_ביטול.md §3).
 Do not calculate amounts or dates for a specific customer and do not add numbers that are not in the documents.
 If the answer is not in the documents, reply exactly: לא מופיע במדיניות
-Keep the answer under 120 words."""
+Keep the answer under 120 words.
+Do not repeat policy or customer numbers from the question."""
 NOT_IN_POLICY = "לא מופיע במדיניות"
 GENERAL_TIMEOUT = 8.0
 # Thinking tokens count toward max_tokens (SDK 2.3.0 docs); 1024 truncated a live Hebrew answer.
@@ -53,6 +54,7 @@ INTENT_NAMES = {
     Intent.GENERAL_POLICY: "שאלה כללית על הנהלים",
     Intent.UNKNOWN: "בקשה לא מזוהה",
 }
+_ID_CONTEXT = re.compile(r"(?:(?<![^\W\d_])[ושהבלמכ]*(?:פוליסה|פוליסת|לקוח) ?|(?<![A-Za-z])C-)(\d{4})(?!\d)")
 NEEDS_POLICY = (Intent.CANCELLATION, Intent.CLAIM_STATUS, Intent.CLAIM_PAYMENT_DATE, Intent.POLICY_INFO)
 _CITATION = re.compile(r"([^\s()\[\]§,:]+\.md)\s*§\s*(\d+[א-ת]?|[א-ת]{1,2})(?![א-ת])")
 
@@ -68,6 +70,45 @@ class Response:
     @property
     def degraded(self) -> bool:
         return self.banner is not None
+
+
+# --- one read per policy per question --------------------------------------------------------
+
+class _OneReadPerCall:
+    """Within one answer() call every policy is read once, and the same Policy object is used everywhere
+    (resolution, claims safety, rules, safety net). A second read that disagrees means the source changed
+    under us: RepositoryUnavailable, so no amounts are computed from mixed data."""
+
+    def __init__(self, repo: PolicyRepository):
+        self._repo = repo
+        self.source_name = repo.source_name
+        self._policies: dict[str, Policy | None] = {}
+        self._customers: dict[str, list[Policy]] = {}
+
+    def _keep(self, policy: Policy) -> Policy:
+        seen = self._policies.get(policy.policy_id)
+        if seen is None:  # first read (or an earlier "not found", now superseded by a real record)
+            self._policies[policy.policy_id] = policy
+            return policy
+        if seen != policy and not (seen.conflicting_records and policy.conflicting_records):
+            raise RepositoryUnavailable(f"policy {policy.policy_id} changed between two reads in one question")
+        return seen if not policy.conflicting_records else policy
+
+    def get(self, policy_id: str) -> Policy | None:
+        key = str(policy_id).strip()
+        if key not in self._policies:
+            policy = self._repo.get(key)
+            self._policies[key] = None if policy is None else self._keep(policy)
+        return self._policies[key]
+
+    def by_customer(self, customer_id: str) -> list[Policy]:
+        key = str(customer_id).strip()
+        if key not in self._customers:
+            self._customers[key] = [self._keep(p) for p in self._repo.by_customer(key)]
+        return self._customers[key]
+
+    def find_names_in(self, text: str) -> list[Policy]:
+        return [self._keep(p) for p in self._repo.find_names_in(text)]
 
 
 # --- small builders ---------------------------------------------------------------------
@@ -154,6 +195,9 @@ def _resolve(ex: Extraction, repo: PolicyRepository) -> tuple[Policy | None, Dec
     else:
         return None, None
 
+    # The same policy twice (duplicate records) is one candidate; step 3 then stops it as CONFLICTING_RECORDS.
+    candidates = list({p.policy_id: p for p in reversed(candidates)}.values())[::-1]
+
     # Resolved from a customer id or a name: EVERY product the rep mentioned must exist for this customer.
     owned = {p.product for p in candidates}
     foreign = [p for p in ex.products_mentioned if p not in owned]
@@ -205,7 +249,10 @@ def general_answer(question: str, llm, policies_dir: str | Path, policy_id: str 
     without_citations = _CITATION.sub(" ", answer_text)
     # Numbers are grounded in the procedures only – never in the question (a number the rep typed is not
     # policy). The policy / customer ids found in the question are the only exception.
-    stray_numbers = ungrounded_numbers(without_citations, "\n".join([*docs.values(), *sorted(id_numbers)]))
+    # A policy / customer id from the question may appear only in identifier context ("פוליסה 4471",
+    # "ללקוח C-1088"); anywhere else it is just a number and must be in the procedures.
+    in_context = _ID_CONTEXT.sub(lambda m: " " if m.group(1) in id_numbers else m.group(0), without_citations)
+    stray_numbers = ungrounded_numbers(in_context, "\n".join(docs.values()))
     # A currency-marked amount must be in the procedures themselves; the identifier exception never applies.
     doc_numbers = numbers_in("\n".join(docs.values()))
     stray_numbers = sorted(set(stray_numbers) | (currency_amounts(without_citations) - doc_numbers))
@@ -388,7 +435,7 @@ def _run(question: str, repo, llm, as_of: date, policies_dir) -> tuple[Decision,
 def answer(question: str, repo: PolicyRepository, llm=None, as_of: date = DEFAULT_AS_OF,
            policies_dir: str | Path = "data/policies") -> Response:
     started = time.perf_counter()
-    repo = ValidatedPolicyRepository(repo)
+    repo = _OneReadPerCall(ValidatedPolicyRepository(repo))
     try:
         d, path, ex = _run(question, repo, llm, as_of, policies_dir)
     except RepositoryUnavailable as exc:

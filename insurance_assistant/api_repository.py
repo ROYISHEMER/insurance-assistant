@@ -16,8 +16,9 @@ Assumed contract:
 - Optional bearer token from env POLICY_API_TOKEN, sent as "Authorization: Bearer ..." (never logged).
 
 Unavailability is never "not found": a timeout, connection error, HTTP 5xx, any status other than
-200/404, invalid JSON, a response of the wrong shape, or a record for a different policy/customer raises
-RepositoryUnavailable.
+200/404 (redirects are refused, never followed), any exception while building, sending or reading the
+request, invalid JSON, a response of the wrong shape, or a record for a different policy/customer raises
+RepositoryUnavailable. Two records with the same policy id are both flagged conflicting_records.
 """
 from __future__ import annotations
 
@@ -26,11 +27,27 @@ import os
 import urllib.error
 import urllib.parse
 import urllib.request
+import unicodedata
 
 from .models import Policy
 from .repository import COLUMNS, RepositoryUnavailable, policy_from_values
 
 DEFAULT_TIMEOUT = 3.0
+
+
+class _RefuseRedirects(urllib.request.HTTPRedirectHandler):
+    """Never follow a redirect: the Authorization header must never reach another host."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None  # urllib then raises HTTPError for the 3xx
+
+
+_OPENER = urllib.request.build_opener(_RefuseRedirects)
+
+
+def token_is_valid(token: str) -> bool:
+    """No whitespace and no control characters (a newline would split the HTTP header)."""
+    return bool(token) and not any(ch.isspace() or unicodedata.category(ch).startswith("C") for ch in token)
 
 
 def _raw(value: object) -> str:
@@ -54,6 +71,8 @@ class ApiPolicyRepository:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self._token = token if token is not None else os.environ.get("POLICY_API_TOKEN")
+        if self._token is not None and not token_is_valid(self._token):
+            raise ValueError("POLICY_API_TOKEN is not valid")  # never include the token itself
 
     def __repr__(self) -> str:  # never show the token
         return f"ApiPolicyRepository({self.base_url!r})"
@@ -61,21 +80,23 @@ class ApiPolicyRepository:
     # --- HTTP ------------------------------------------------------------------------------
 
     def _get_json(self, path: str):
-        """(found, data). 404 -> (False, None); anything unexpected -> RepositoryUnavailable."""
-        headers = {"Accept": "application/json"}
-        if self._token:
-            headers["Authorization"] = f"Bearer {self._token}"
-        request = urllib.request.Request(self.base_url + path, headers=headers, method="GET")
+        """(found, data). 404 -> (False, None); anything unexpected -> RepositoryUnavailable.
+
+        Error messages carry only a status code or an exception TYPE, never exception text: that text can
+        echo request headers, and so the token."""
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+            headers = {"Accept": "application/json"}
+            if self._token:
+                headers["Authorization"] = f"Bearer {self._token}"
+            request = urllib.request.Request(self.base_url + path, headers=headers, method="GET")
+            with _OPENER.open(request, timeout=self.timeout) as response:
                 status, body = response.status, response.read()
-        except urllib.error.HTTPError as exc:
+        except urllib.error.HTTPError as exc:  # includes every refused 3xx redirect
             if exc.code == 404:
                 return False, None
             raise RepositoryUnavailable(f"policy API returned HTTP {exc.code}") from None
-        except (urllib.error.URLError, TimeoutError, OSError) as exc:
-            reason = getattr(exc, "reason", exc)
-            raise RepositoryUnavailable(f"policy API unreachable: {type(exc).__name__}: {reason}") from None
+        except Exception as exc:  # timeout, connection, IncompleteRead, InvalidURL, UnicodeError, ...
+            raise RepositoryUnavailable(f"policy API request failed: {type(exc).__name__}") from None
         if status != 200:
             raise RepositoryUnavailable(f"policy API returned HTTP {status}")
         try:
@@ -109,8 +130,17 @@ class ApiPolicyRepository:
         if not isinstance(data, list):
             raise RepositoryUnavailable("policy API returned something other than a list of policies")
         policies = [self._policy(record) for record in data]
-        if any(p.customer_id != key for p in policies):
-            raise RepositoryUnavailable("policy API returned policies of a different customer")
+        if any(not p.policy_id or p.customer_id != key for p in policies):
+            raise RepositoryUnavailable("policy API returned a record without a policy id or of another customer")
+        # The same policy twice: flag both, exactly like duplicate CSV rows.
+        counts = {}
+        for p in policies:
+            counts[p.policy_id] = counts.get(p.policy_id, 0) + 1
+        for p in policies:
+            if counts[p.policy_id] > 1:
+                p.conflicting_records = True
+                p.data_issues.append(f"policy_id: מספר הפוליסה מופיע ב-{counts[p.policy_id]} רשומות – "
+                                     "הרשומות סותרות, יש לבדוק במערכת")
         return policies
 
     def find_names_in(self, text: str) -> list[Policy]:

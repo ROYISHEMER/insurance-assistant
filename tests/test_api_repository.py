@@ -254,7 +254,7 @@ def test_cli_api_url_from_env(server, capsys, monkeypatch):
 
 @pytest.mark.parametrize("argv,fragment", [
     (["4471", "--source", "api", "--no-llm"], "--api-url"),
-    (["4471", "--source", "api", "--api-url", "ftp://x", "--no-llm"], "http"),
+    (["4471", "--source", "api", "--api-url", "ftp://x", "--no-llm"], "כתובת API לא תקינה"),
     (["--source", "api", "--api-url", "http://x", "--report"], "--report"),
 ])
 def test_cli_api_errors(capsys, monkeypatch, argv, fragment):

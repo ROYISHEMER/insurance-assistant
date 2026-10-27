@@ -244,7 +244,7 @@ def test_general_question_with_policy(repo):
     assert "## 6. פוליסה עם תביעה פתוחה" in second["system"] and "## ה. פניות רגולטור" in second["system"]
     assert second["timeout"] == 8.0 and second["max_tokens"] == 4096
     assert second["system"].startswith(GENERAL_SYSTEM_PROMPT) and GENERAL_SYSTEM_PROMPT.endswith(
-        "\nKeep the answer under 120 words.")
+        "\nKeep the answer under 120 words.\nDo not repeat policy or customer numbers from the question.")
     assert llm.calls[0]["max_tokens"] == 1024
 
 

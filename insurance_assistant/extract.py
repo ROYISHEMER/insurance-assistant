@@ -154,8 +154,17 @@ def _corrected_by_ella(text: str, negations: list[re.Match]) -> bool:
     return False
 
 
+# Cancellation verbs and the noun as whole words, after real Hebrew prefixes (ו first, then ש/כש, then one of
+# ה ב ל מ כ). Not a substring: "מובטל" (unemployed) contains "בטל" but is not a cancellation.
+_CANCEL_WORD = re.compile(
+    r"(?<![^\W\d_])ו?(?:כש|ש)?[הבלמכ]?"
+    r"(?:ל?בטל|ביטל|[אתינמ]בטל|ביטול)(?:ה|ו|ת|י|ים|ות|נו)?"
+    r"(?![^\W\d_])"
+)
+
+
 def _has_cancel_word(text: str) -> bool:
-    return "בטל" in text or "ביטול" in text
+    return _CANCEL_WORD.search(text) is not None
 
 
 @dataclass

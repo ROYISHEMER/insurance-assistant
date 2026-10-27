@@ -7,12 +7,14 @@ import json
 import os
 import re
 import sys
+import urllib.parse
+import urllib.request
 from dataclasses import asdict
 from datetime import date
 from enum import Enum
 from pathlib import Path
 
-from .api_repository import ApiPolicyRepository
+from .api_repository import ApiPolicyRepository, token_is_valid
 from .assistant import answer
 from .llm import get_llm
 from .models import DEFAULT_AS_OF, StartupError
@@ -50,9 +52,19 @@ def load_api_source(api_url: str | None, policies_dir: str | Path = DEFAULT_DOCS
     check_policy_docs(policies_dir)
     if not api_url or not api_url.strip():
         raise StartupError("עם --source api יש לציין --api-url או את משתנה הסביבה POLICY_API_URL")
-    if not re.match(r"https?://\S+$", api_url.strip()):
-        raise StartupError(f"כתובת ה-API אינה תקינה: '{api_url}' (נדרש http:// או https://)")
-    return ApiPolicyRepository(api_url.strip())
+    url = api_url.strip()
+    try:
+        parts = urllib.parse.urlsplit(url)
+        parts.port  # raises ValueError on a bad port
+        if parts.scheme not in ("http", "https") or not parts.hostname or any(ch.isspace() for ch in url):
+            raise ValueError
+        urllib.request.Request(url + "/policies/0")
+    except Exception:
+        raise StartupError("כתובת API לא תקינה") from None
+    token = os.environ.get("POLICY_API_TOKEN")
+    if token is not None and not token_is_valid(token):
+        raise StartupError("POLICY_API_TOKEN לא תקין")  # never echo the token
+    return ApiPolicyRepository(url, token=token)
 
 
 def _json_default(value):
