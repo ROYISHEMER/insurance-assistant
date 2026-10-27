@@ -106,8 +106,17 @@ def _check_arrears(policy: Policy, as_of: date, decision: Decision) -> bool | No
         decision.numbers["arrears"] = None
         decision.missing.append(f"תאריך התשלום האחרון – לא ניתן לבדוק פיגור בתשלומים ({CANCEL} §5)")
         return None
-    days = (as_of - policy.last_payment_date).days
     decision.facts.append(Fact("תשלום אחרון", policy.last_payment_date.isoformat(), data_source(policy)))
+    if policy.last_payment_date > as_of:
+        # Impossible data: a payment after the calculation date. Arrears unknown, so no net estimate.
+        decision.numbers["arrears"] = None
+        decision.warnings.append(
+            f"בעיה בנתוני הפוליסה: last_payment_date: {policy.last_payment_date.isoformat()} מאוחר מתאריך "
+            f"החישוב {as_of.isoformat()}"
+        )
+        decision.missing.append(f"תאריך תשלום אחרון תקין – לא ניתן לבדוק פיגור בתשלומים ({CANCEL} §5)")
+        return None
+    days = (as_of - policy.last_payment_date).days
     arrears = days > ARREARS_DAYS
     decision.numbers["arrears"] = arrears
     if arrears:

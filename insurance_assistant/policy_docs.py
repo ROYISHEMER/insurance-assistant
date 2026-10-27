@@ -14,6 +14,13 @@ POLICY_DOC_FILES = (
     "03_טיפול_בתביעות.md",
     "04_חריגים.md",
 )
+# Sections the code cites; startup fails if any is missing.
+REQUIRED_SECTIONS = {
+    "01_תנאי_ביטול.md": ("1", "2", "3", "4", "5", "6", "7"),
+    "02_החזרים.md": ("1", "2", "2א", "2ב", "2ג", "3", "4", "5"),
+    "03_טיפול_בתביעות.md": ("1", "2", "3", "4", "5", "6"),
+    "04_חריגים.md": ("א", "ב", "ג", "ד", "ה"),
+}
 # "## 1. כללי" or "## א. דמי ביטול ..."
 _SECTION_HEADING = re.compile(r"^##[ \t]+(\d+|[א-ת]{1,2})\.[ \t]+\S", re.MULTILINE)
 
@@ -42,7 +49,13 @@ def load_policy_docs(directory: str | Path = DEFAULT_DOCS_DIR) -> dict[str, str]
     folder = Path(directory)
     if not folder.is_dir():
         raise StartupError(f"תיקיית הנהלים לא נמצאה: {folder}")
-    return {name: _read_doc(folder / name) for name in POLICY_DOC_FILES}
+    docs = {name: _read_doc(folder / name) for name in POLICY_DOC_FILES}
+    for name, required in REQUIRED_SECTIONS.items():
+        present = split_sections(docs[name])
+        missing = [s for s in required if s not in present]
+        if missing:
+            raise StartupError(f"במסמך הנוהל {name} חסר סעיף שהכלי מצטט: §{', §'.join(missing)}")
+    return docs
 
 
 _SECTION_START = re.compile(r"^##[ \t]+(\d+|[א-ת]{1,2})\.", re.MULTILINE)

@@ -669,5 +669,71 @@
   "absent": [
    "additional_request"
   ]
+ },
+ {
+  "id": "regulator-inflection",
+  "set": "core",
+  "q": "4471 רוצה לבטל ויגיש תלונה לממונה על הביטוח",
+  "outcome": "ESCALATE",
+  "code": "REGULATOR",
+  "absent": [
+   "additional_request",
+   "conditional_estimate"
+  ]
+ },
+ {
+  "id": "negation-ella-policy",
+  "set": "core",
+  "q": "4428 לא רוצה לבטל את התביעה אלא את הפוליסה",
+  "outcome": "ESCALATE",
+  "code": "OPEN_CLAIM",
+  "absent": [
+   "additional_request",
+   "conditional_estimate"
+  ]
+ },
+ {
+  "id": "phone-number",
+  "set": "core",
+  "q": "לקוח חדש רוצה לבטל. הטלפון שלו 050-4471-123",
+  "outcome": "CANNOT_ANSWER",
+  "code": "NO_POLICY",
+  "absent": [
+   "additional_request",
+   "conditional_estimate"
+  ]
+ },
+ {
+  "id": "unknown-and-known-number",
+  "set": "core",
+  "q": "מספר הפוליסה הוא 4461; 4471 הוא מספר הפנייה. הלקוח רוצה לבטל",
+  "outcome": "CANNOT_ANSWER",
+  "code": "POLICY_NOT_FOUND",
+  "absent": [
+   "additional_request",
+   "conditional_estimate"
+  ]
+ },
+ {
+  "id": "longer-surname",
+  "set": "core",
+  "q": "רונן אביטלמן רוצה לבטל",
+  "outcome": "CANNOT_ANSWER",
+  "code": "NO_POLICY",
+  "absent": [
+   "additional_request",
+   "conditional_estimate"
+  ]
+ },
+ {
+  "id": "product-mismatch",
+  "set": "core",
+  "q": "C-1088 רוצה לבטל את ביטוח הדירה",
+  "outcome": "CANNOT_ANSWER",
+  "code": "PRODUCT_MISMATCH",
+  "absent": [
+   "additional_request",
+   "conditional_estimate"
+  ]
  }
 ]

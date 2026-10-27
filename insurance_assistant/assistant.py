@@ -122,11 +122,15 @@ def _resolve(ex: Extraction, repo: PolicyRepository) -> tuple[Policy | None, Dec
         return None, d
 
     # d. resolve to one policy
+    if ex.unknown_policy_id:
+        # Also next to a known id: never guess which of the two numbers is the policy.
+        missing = "מספר פוליסה תקין"
+        if known:
+            missing = (f"יש לוודא מול הלקוח איזה מספר הוא מספר הפוליסה: {ex.unknown_policy_id} לא נמצא, "
+                       f"{known[0].policy_id} קיים")
+        return None, _cannot(intent, "POLICY_NOT_FOUND", f"פוליסה {ex.unknown_policy_id} לא נמצאה", missing)
     if known:
         return known[0], None
-    if ex.unknown_policy_id:
-        return None, _cannot(intent, "POLICY_NOT_FOUND", f"פוליסה {ex.unknown_policy_id} לא נמצאה",
-                             "מספר פוליסה תקין")
     if customer_ids:
         candidates = repo.by_customer(customer_ids[0])
         if not candidates:
@@ -142,10 +146,15 @@ def _resolve(ex: Extraction, repo: PolicyRepository) -> tuple[Policy | None, Dec
     else:
         return None, None
 
-    if len(candidates) > 1 and ex.product_hint:
+    # Resolved from a customer id or a name: the product the rep mentioned must exist for this customer.
+    if ex.product_hint:
         narrowed = [p for p in candidates if p.product == ex.product_hint]
-        if len(narrowed) == 1:
-            return narrowed[0], None
+        if not narrowed:
+            products = ", ".join(f"{p.product} ({p.policy_id})" for p in candidates)
+            d = _cannot(intent, "PRODUCT_MISMATCH", f"ללקוח אין פוליסת {ex.product_hint}; הפוליסות שלו: {products}",
+                        f"אישור מהלקוח: על איזו פוליסה מדובר (נאמר: {ex.product_hint})")
+            return None, _list_policies(d, candidates)
+        candidates = narrowed
     if len(candidates) > 1:
         d = _cannot(intent, "MULTIPLE_POLICIES", "ללקוח כמה פוליסות – יש לבחור אחת", "מספר הפוליסה הרלוונטית")
         return None, _list_policies(d, candidates)
@@ -164,7 +173,8 @@ def _resolve_dir(policies_dir: str | Path) -> str:
     return str(folder if folder.is_absolute() else PROJECT_ROOT / folder)
 
 
-def general_answer(question: str, llm, policies_dir: str | Path, policy_id: str | None) -> Decision:
+def general_answer(question: str, llm, policies_dir: str | Path, policy_id: str | None,
+                   id_numbers: frozenset[str] = frozenset()) -> Decision:
     docs = _docs(_resolve_dir(policies_dir))
     intent = Intent.GENERAL_POLICY
     corpus = "\n\n".join(f"=== {name} ===\n{text}" for name, text in docs.items())
@@ -183,7 +193,9 @@ def general_answer(question: str, llm, policies_dir: str | Path, policy_id: str 
     citations = list(dict.fromkeys(_CITATION.findall(answer_text)))
     bad_citations = [f"{f} §{s}" for f, s in citations if s not in sections.get(f, {})]
     without_citations = _CITATION.sub(" ", answer_text)
-    stray_numbers = ungrounded_numbers(without_citations, "\n".join(docs.values()) + "\n" + question)
+    # Numbers are grounded in the procedures only – never in the question (a number the rep typed is not
+    # policy). The policy / customer ids found in the question are the only exception.
+    stray_numbers = ungrounded_numbers(without_citations, "\n".join([*docs.values(), *sorted(id_numbers)]))
     if not citations or bad_citations or stray_numbers:
         d = _cannot(intent, "UNGROUNDED", "תשובת מודל השפה לא עברה בדיקת עיגון במסמכים", policy_id=policy_id)
         if not citations:
@@ -201,8 +213,10 @@ def general_answer(question: str, llm, policies_dir: str | Path, policy_id: str 
     if any(f == REFUNDS and s.startswith("2") for f, s in refs) and (REFUNDS, "3") not in refs:
         refs.append((REFUNDS, "3"))
     for f, s in refs:
-        d.facts.append(Fact(f"{f} §{s}", sections[f][s], f"{f} §{s}"))
-    if any(f in (CANCEL, REFUNDS) for f, _ in refs):
+        text = sections.get(f, {}).get(s)
+        if text is not None:
+            d.facts.append(Fact(f"{f} §{s}", text, f"{f} §{s}"))
+    if any(f in (CANCEL, REFUNDS) for f, _ in refs) and docs.get(EXCEPTIONS):
         d.facts.append(Fact("חריגים הגוברים על הנהלים הבסיסיים", docs[EXCEPTIONS].strip(), EXCEPTIONS))
     return d
 
@@ -239,6 +253,11 @@ def _regulator(ex: Extraction) -> Decision:
     return d
 
 
+def _id_numbers(ex: Extraction) -> frozenset[str]:
+    ids = [ex.policy_id, *ex.other_policy_ids, ex.unknown_policy_id, ex.customer_id, *ex.other_customer_ids]
+    return frozenset(i.removeprefix("C-") for i in ids if i)
+
+
 def _dispatch(intent: Intent, policy: Policy | None, ex: Extraction, question: str, repo, llm,
               as_of: date, policies_dir) -> tuple[Decision, str]:
     pid = policy.policy_id if policy else None
@@ -255,7 +274,7 @@ def _dispatch(intent: Intent, policy: Policy | None, ex: Extraction, question: s
     if intent is Intent.REFUND_TIMING:
         return refund_timing(pid), "rules:refunds"
     if intent is Intent.GENERAL_POLICY and llm is not None:
-        return general_answer(question, llm, policies_dir, pid), "llm:general → grounding"
+        return general_answer(question, llm, policies_dir, pid, _id_numbers(ex)), "llm:general → grounding"
     if intent is Intent.UNKNOWN and policy is not None:
         return _cannot(intent, "UNCLEAR_REQUEST",
                        f"לא זוהתה הבקשה לגבי פוליסה {pid} – בקש מהלקוח לפרט", policy=policy), "unclear"

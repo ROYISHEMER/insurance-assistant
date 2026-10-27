@@ -89,7 +89,7 @@ def test_classify_wrong_intent_answer_is_judged_by_majority():
 
 def test_cases_file_shape():
     cases = load_cases()
-    assert len({c["id"] for c in cases}) == len(cases) == 57
+    assert len({c["id"] for c in cases}) == len(cases) == 63
     for c in cases:
         if c["id"] not in ("two-policies", "cancel-and-refund"):
             assert "additional_request" in c["absent"], c["id"]

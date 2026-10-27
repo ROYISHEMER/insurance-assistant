@@ -7,17 +7,20 @@ _DASHES = re.compile(r"[-־–—]")  # hyphen, Hebrew maqaf, en dash, em dash
 _QUOTES = re.compile(r"['\"׳״]")  # ' " geresh gershayim
 _SPACES = re.compile(r"\s+")
 
+# Stored without the definite ה: up to two prefix letters (ו ש ה ב ל מ כ) are allowed at a word start,
+# so "לממונה על הביטוח", "והמפקח" and "לרשות שוק ההון" all match.
 REGULATOR_TERMS = (
     "רשות שוק ההון",
     "שוק ההון",
     "רגולטור",
-    "הממונה על הביטוח",
-    "המפקח על הביטוח",
+    "ממונה על הביטוח",
+    "מפקח על הביטוח",
     "פיקוח על הביטוח",
     # The bare word is deliberate over-escalation: a false referral to the shift manager is cheap,
     # a missed regulator complaint is not (04_חריגים.md §ה).
     "מפקח",
 )
+_REGULATOR_PATTERNS = tuple(re.compile(r"(?<![א-ת])[ושהבלמכ]{0,2}" + re.escape(t)) for t in REGULATOR_TERMS)
 
 
 def normalize_text(text: str) -> str:
@@ -29,4 +32,4 @@ def normalize_text(text: str) -> str:
 
 def mentions_regulator(text: str) -> bool:
     normalized = normalize_text(text)
-    return any(term in normalized for term in REGULATOR_TERMS)
+    return any(pattern.search(normalized) for pattern in _REGULATOR_PATTERNS)

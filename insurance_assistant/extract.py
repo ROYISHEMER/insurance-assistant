@@ -28,7 +28,8 @@ def normalize_question(question: str) -> str:
 _CUSTOMER_ID = re.compile(r"(?<![A-Za-z0-9])[Cc]-?(\d{4})(?![\dA-Za-z])")
 # A Latin letter touching the number (A4448, 4448B, XC-1088) means it is not a policy id;
 # Hebrew prefix letters glued before it (ל4471, ב4471, ...) are fine.
-_POLICY_ID = re.compile(r"(?<![\dA-Za-z])(?<![A-Za-z]-)\d{4}(?![\dA-Za-z])")
+# Part of a hyphenated digit group (a phone number like 050-4471-123) is not a policy id either.
+_POLICY_ID = re.compile(r"(?<![\dA-Za-z])(?<![A-Za-z]-)(?<!\d-)\d{4}(?![\dA-Za-z])(?!-\d)")
 _YEARS = range(1900, 2101)
 _PREFIX = r"(?<![א-ת])ו?ש?[הבלמכ]?"
 _PRODUCTS = {
@@ -50,6 +51,23 @@ class Identifiers:
     product_hint: str | None = None
 
 
+_AMOUNT_AFTER = re.compile(r"\s*(?:₪|ש\"ח|ש״ח|שח(?![א-ת])|שקל|NIS(?![A-Za-z]))")
+_AMOUNT_BEFORE = re.compile(r"₪\s*$")
+
+
+def _is_amount(text: str, match: re.Match) -> bool:
+    """"5000 ₪" / "₪5000" is money, not a policy id."""
+    return bool(_AMOUNT_AFTER.match(text, match.end()) or _AMOUNT_BEFORE.search(text[:match.start()]))
+
+
+def name_appears_in(name: str, text: str) -> bool:
+    """The full name, not followed by a Hebrew letter, preceded by a non-letter or up to two prefix letters."""
+    if not name:
+        return False
+    pattern = r"(?<![^\W\d_])[ושהבלמכ]{0,2}" + re.escape(name) + r"(?![א-ת])"
+    return re.search(pattern, text) is not None
+
+
 def _unique(items: list[str]) -> list[str]:
     return list(dict.fromkeys(items))
 
@@ -62,17 +80,21 @@ def extract_identifiers(text: str, repo: PolicyRepository) -> Identifiers:
     without_customers = _CUSTOMER_ID.sub(" ", text)
 
     known, unknown = [], []
-    for candidate in _unique(_POLICY_ID.findall(without_customers)):
+    candidates = [m.group() for m in _POLICY_ID.finditer(without_customers) if not _is_amount(without_customers, m)]
+    for candidate in _unique(candidates):
         if int(candidate) in _YEARS:
             continue
         (known if repo.get(candidate) is not None else unknown).append(candidate)
     if known:
         ids.policy_id, ids.other_policy_ids = known[0], known[1:]
-    elif unknown:
+    if unknown:
+        # Kept even next to a known id: the pipeline asks the rep which number is the policy.
         ids.unknown_policy_id = unknown[0]
 
+    # Whole-name matches only, whatever the repository's own matching does.
     for policy in repo.find_names_in(text):
-        ids.name_matches.setdefault(policy.customer_name, set()).add(policy.customer_id)
+        if name_appears_in(policy.customer_name, text):
+            ids.name_matches.setdefault(policy.customer_name, set()).add(policy.customer_id)
 
     products = [name for name, pattern in _PRODUCTS.items() if pattern.search(text)]
     if len(products) == 1:
@@ -92,9 +114,27 @@ _WHEN = ("מתי", "תוך כמה", "כמה זמן")
 _PAID = ("ישולם", "תשולם", "שולם", "ישלמו", "משלמים", "תשלום", "הכסף")
 
 
+_ELLA = re.compile(r"(?<![א-ת])אלא(?![א-ת])")
+_SENTENCE_END = re.compile(r"[.;?!\n]")
+
+
 def strip_negations(text: str) -> str:
     """Remove only the negated verb phrase; never crosses punctuation, never strips the object."""
     return _NEGATED_CANCEL.sub(" ", _NEGATED_VERB.sub(" ", text))
+
+
+def _negated_cancellations(text: str) -> list[re.Match]:
+    verb_phrases = [m for m in _NEGATED_VERB.finditer(text) if _has_cancel_word(m.group())]
+    return verb_phrases + list(_NEGATED_CANCEL.finditer(text))  # positions refer to the original text
+
+
+def _corrected_by_ella(text: str, negations: list[re.Match]) -> bool:
+    """"לא רוצה לבטל את התביעה אלא את הפוליסה": "אלא" later in the same sentence corrects the object."""
+    for m in negations:
+        end = _SENTENCE_END.search(text, m.end())
+        if _ELLA.search(text, m.end(), end.start() if end else len(text)):
+            return True
+    return False
 
 
 def _has_cancel_word(text: str) -> bool:
@@ -112,6 +152,7 @@ class Signals:
     owed: bool = False
     cancel: bool = False
     cancel_keyword_raw: bool = False
+    negated_cancel: bool = False
 
     @property
     def payment(self) -> bool:
@@ -120,6 +161,8 @@ class Signals:
 
 def keyword_signals(text: str) -> Signals:
     stripped = strip_negations(text)
+    negations = _negated_cancellations(text)
+    corrected = _corrected_by_ella(text, negations)
     return Signals(
         claim="תביע" in stripped,
         when=any(w in stripped for w in _WHEN),
@@ -128,8 +171,9 @@ def keyword_signals(text: str) -> Signals:
         documents="מסמכ" in stripped,
         details="פרטי" in stripped or "סטטוס" in stripped,
         owed="מגיע לו" in stripped or "מגיע לה" in stripped,
-        cancel=_has_cancel_word(_CANCEL_CONTEXT.sub(" ", stripped)),
-        cancel_keyword_raw=_has_cancel_word(stripped),
+        cancel=corrected or _has_cancel_word(_CANCEL_CONTEXT.sub(" ", stripped)),
+        cancel_keyword_raw=corrected or _has_cancel_word(stripped),
+        negated_cancel=bool(negations),
     )
 
 
@@ -154,7 +198,8 @@ def keyword_intents(s: Signals) -> tuple[Intent, list[Intent]]:
         return Intent.CANCELLATION, [other] if other else []
     if other:
         return other, []
-    if s.owed or s.refund:
+    # "החזר" / "מגיע לו" mean cancellation only if the rep did not just say the customer is NOT cancelling.
+    if (s.owed or s.refund) and not s.negated_cancel:
         return Intent.CANCELLATION, []
     if s.details:
         return Intent.POLICY_INFO, []

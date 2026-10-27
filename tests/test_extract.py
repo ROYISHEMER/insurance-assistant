@@ -203,7 +203,7 @@ def test_customer_ids(repo):
 def test_unknown_policy_id(repo):
     assert extract("פוליסה 9999", repo).unknown_policy_id == "9999"
     e = extract("פוליסה 9999 או 4471", repo)
-    assert e.policy_id == "4471" and e.unknown_policy_id is None
+    assert e.policy_id == "4471" and e.unknown_policy_id == "9999"  # kept: the pipeline asks which is right
 
 
 def test_several_policy_ids(repo):
