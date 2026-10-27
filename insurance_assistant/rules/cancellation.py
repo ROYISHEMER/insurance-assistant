@@ -10,6 +10,10 @@ from datetime import date, timedelta
 
 from ..models import Decision, Fact, Intent, Outcome, Policy
 from ..repository import PolicyRepository
+from .common import (
+    ACTIVE, CANCEL, CANCELLED, CAR, EXCEPTIONS, FROZEN, HEALTH, PRODUCTS, REFUNDS, TRAVEL,
+    data_source, format_money, start_decision,
+)
 
 COOLING_OFF_DAYS = 14
 ARREARS_DAYS = 60  # arrears = MORE than 60 days since the last payment
@@ -17,14 +21,6 @@ CAR_FEE = 150
 SHORT_TENURE_FEE = 50
 HEALTH_LEGACY_CUTOFF = date(2024, 1, 1)  # health policies starting BEFORE it
 HEALTH_LEGACY_NOTICE_DAYS = 30
-
-CAR, HEALTH, TRAVEL, HOME = "רכב", "בריאות", "נסיעות", "דירה"
-PRODUCTS = (CAR, HEALTH, TRAVEL, HOME)
-ACTIVE, CANCELLED, FROZEN = "פעילה", "מבוטלת", "מוקפאת"
-
-CANCEL = "01_תנאי_ביטול.md"
-REFUNDS = "02_החזרים.md"
-EXCEPTIONS = "04_חריגים.md"
 
 NOT_FROZEN = ", בתנאי שהפוליסה לא הוקפאה מעולם"
 HEBREW_MONTHS = ("ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי",
@@ -76,32 +72,11 @@ def grant_amount(monthly_premium: float, percent: int) -> float:
 
 # --- formatting ----------------------------------------------------------------
 
-def _money(amount: float) -> str:
-    return f"{amount:,.0f}" if float(amount).is_integer() else f"{amount:,.2f}"
-
-
 def _day(d: date) -> str:
     return d.strftime("%d.%m.%Y")
 
 
-def _data_source(policy: Policy) -> str:
-    return f"{policy.source}, פוליסה {policy.policy_id}"
-
-
 # --- shared helpers ---------------------------------------------------------------
-
-def _start(policy: Policy, intent: Intent, outcome: Outcome, code: str, headline: str) -> Decision:
-    """Every decision starts with a status fact and one warning per data issue."""
-    return Decision(
-        outcome=outcome,
-        intent=intent,
-        code=code,
-        headline=headline,
-        policy_id=policy.policy_id,
-        facts=[Fact("סטטוס הפוליסה", policy.status or "חסר", _data_source(policy))],
-        warnings=[f"בעיה בנתוני הפוליסה: {issue}" for issue in policy.data_issues],
-    )
-
 
 def has_open_or_unknown_claims(policy: Policy) -> bool:
     return policy.open_claims is None or policy.open_claims > 0
@@ -109,14 +84,14 @@ def has_open_or_unknown_claims(policy: Policy) -> bool:
 
 def claims_escalation(policy: Policy, intent: Intent = Intent.CANCELLATION) -> Decision:
     if policy.open_claims is None:
-        decision = _start(policy, intent, Outcome.ESCALATE, "UNKNOWN_CLAIMS",
+        decision = start_decision(policy, intent, Outcome.ESCALATE, "UNKNOWN_CLAIMS",
                           "לא ידוע אם יש תביעה פתוחה – יש להעביר למנהל משמרת")
-        decision.facts.append(Fact("תביעות פתוחות", "לא ידוע", _data_source(policy)))
+        decision.facts.append(Fact("תביעות פתוחות", "לא ידוע", data_source(policy)))
         decision.missing.append("מספר התביעות הפתוחות – לא ניתן לשלול תביעה פתוחה")
     else:
-        decision = _start(policy, intent, Outcome.ESCALATE, "OPEN_CLAIM",
+        decision = start_decision(policy, intent, Outcome.ESCALATE, "OPEN_CLAIM",
                           "יש תביעה פתוחה – ביטול דורש אישור מנהל משמרת")
-        decision.facts.append(Fact("תביעות פתוחות", str(policy.open_claims), _data_source(policy)))
+        decision.facts.append(Fact("תביעות פתוחות", str(policy.open_claims), data_source(policy)))
     decision.facts.append(Fact("ביטול פוליסה עם תביעה פתוחה דורש אישור מנהל משמרת",
                                "העברה למנהל משמרת", f"{CANCEL} §6"))
     decision.warnings.append(
@@ -132,7 +107,7 @@ def _check_arrears(policy: Policy, as_of: date, decision: Decision) -> bool | No
         decision.missing.append(f"תאריך התשלום האחרון – לא ניתן לבדוק פיגור בתשלומים ({CANCEL} §5)")
         return None
     days = (as_of - policy.last_payment_date).days
-    decision.facts.append(Fact("תשלום אחרון", policy.last_payment_date.isoformat(), _data_source(policy)))
+    decision.facts.append(Fact("תשלום אחרון", policy.last_payment_date.isoformat(), data_source(policy)))
     arrears = days > ARREARS_DAYS
     decision.numbers["arrears"] = arrears
     if arrears:
@@ -198,7 +173,7 @@ def evaluate_cancellation(policy: Policy, as_of: date, repo: PolicyRepository) -
     try:
         return _evaluate(policy, as_of, repo)
     except OverflowError:
-        decision = _start(policy, Intent.CANCELLATION, Outcome.CANNOT_ANSWER, "DATE_OUT_OF_RANGE",
+        decision = start_decision(policy, Intent.CANCELLATION, Outcome.CANNOT_ANSWER, "DATE_OUT_OF_RANGE",
                           "תאריכי הפוליסה מחוץ לטווח שניתן לחשב")
         decision.warnings.append("חישוב מועדי הביטול חרג מטווח התאריכים הנתמך (שנים 1–9999) – יש לבדוק את התאריכים במערכת")
         return decision
@@ -206,19 +181,19 @@ def evaluate_cancellation(policy: Policy, as_of: date, repo: PolicyRepository) -
 
 def _evaluate(policy: Policy, as_of: date, repo: PolicyRepository) -> Decision:
     def start(outcome: Outcome, code: str, headline: str) -> Decision:
-        return _start(policy, Intent.CANCELLATION, outcome, code, headline)
+        return start_decision(policy, Intent.CANCELLATION, outcome, code, headline)
 
     if policy.status == CANCELLED:
         d = start(Outcome.ANSWER, "ALREADY_CANCELLED", "הפוליסה כבר מבוטלת")
         if policy.notes:
-            d.facts.append(Fact("הערות", policy.notes, _data_source(policy)))
+            d.facts.append(Fact("הערות", policy.notes, data_source(policy)))
         d.say_to_customer.append("הפוליסה כבר מבוטלת.")
         return d
 
     if policy.status == FROZEN:
         d = start(Outcome.ANSWER, "FROZEN", "פוליסה מוקפאת אינה ניתנת לביטול")
         if policy.notes:
-            d.facts.append(Fact("הערות", policy.notes, _data_source(policy)))
+            d.facts.append(Fact("הערות", policy.notes, data_source(policy)))
         d.facts.append(Fact("פוליסה מוקפאת אינה ניתנת לביטול כל עוד היא מוקפאת",
                             "יש לבקש הפשרה דרך מחלקת גבייה, ורק לאחר מכן להגיש בקשת ביטול",
                             f"{EXCEPTIONS} §ד"))
@@ -253,7 +228,7 @@ def _evaluate(policy: Policy, as_of: date, repo: PolicyRepository) -> Decision:
 
     if as_of < policy.start_date:
         d = start(Outcome.CANNOT_ANSWER, "NOT_STARTED", "הפוליסה עדיין לא התחילה")
-        d.facts.append(Fact("תאריך תחילת הפוליסה", policy.start_date.isoformat(), _data_source(policy)))
+        d.facts.append(Fact("תאריך תחילת הפוליסה", policy.start_date.isoformat(), data_source(policy)))
         d.missing.append("הנהלים אינם מגדירים ביטול של פוליסה (שאינה נסיעות) לפני מועד תחילתה")
         return d
 
@@ -270,7 +245,7 @@ def _travel(policy: Policy, as_of: date, repo: PolicyRepository, start) -> Decis
     )
     if as_of >= trip:
         d = start(Outcome.ANSWER_WITH_GAPS, "TRIP_STARTED", "לפי תאריך תחילת הפוליסה, ייתכן שהנסיעה כבר החלה")
-        d.facts.append(Fact("תאריך תחילת הכיסוי", trip.isoformat(), _data_source(policy)))
+        d.facts.append(Fact("תאריך תחילת הכיסוי", trip.isoformat(), data_source(policy)))
         d.facts.append(Fact("פוליסת נסיעות", "לא ניתנת לביטול מרגע שהנסיעה החלה, ולא יינתן החזר",
                             f"{CANCEL} §4"))
         d.missing.append(departure_missing)
@@ -286,7 +261,7 @@ def _travel(policy: Policy, as_of: date, repo: PolicyRepository, start) -> Decis
     d.numbers["last_cancel_day"] = last_cancel_day.isoformat()
     d.numbers["effective_date"] = effective.isoformat()
     d.facts += [
-        Fact("תאריך תחילת הכיסוי", trip.isoformat(), _data_source(policy)),
+        Fact("תאריך תחילת הכיסוי", trip.isoformat(), data_source(policy)),
         Fact("היום האחרון לביטול (אם תחילת הכיסוי היא מועד היציאה)", last_cancel_day.isoformat(),
              f"{CANCEL} §4"),
         Fact("מועד כניסת הביטול לתוקף", f"{effective.isoformat()} (סוף חודש החיוב)", f"{CANCEL} §1"),
@@ -342,7 +317,7 @@ def _cooling_off(policy: Policy, as_of: date, repo: PolicyRepository, start) -> 
     d.numbers["fee"] = 0
     d.numbers["effective_date"] = as_of.isoformat()
     d.facts += [
-        Fact("תאריך תחילת הפוליסה", policy.start_date.isoformat(), _data_source(policy)),
+        Fact("תאריך תחילת הפוליסה", policy.start_date.isoformat(), data_source(policy)),
         Fact("תקופת התחרטות", f"{days} ימים מתחילת הפוליסה (עד {COOLING_OFF_DAYS})", f"{CANCEL} §2"),
         Fact("דמי ביטול", "אין – גם בפוליסת רכב, דמי 150 ₪ אינם חלים בתקופת ההתחרטות",
              f"{CANCEL} §2, {EXCEPTIONS} §א"),
@@ -364,7 +339,7 @@ def _cooling_off(policy: Policy, as_of: date, repo: PolicyRepository, start) -> 
 def _estimate(policy: Policy, as_of: date, repo: PolicyRepository, start) -> Decision:
     d = start(Outcome.ANSWER_WITH_GAPS, "CANCEL_ESTIMATE", "הערכת ביטול")
     begin = policy.start_date
-    src = _data_source(policy)
+    src = data_source(policy)
     d.facts += [
         Fact("מוצר", policy.product, src),
         Fact("תאריך תחילת הפוליסה", begin.isoformat(), src),
@@ -415,13 +390,13 @@ def _estimate(policy: Policy, as_of: date, repo: PolicyRepository, start) -> Dec
         amount = grant_amount(policy.monthly_premium, percent)
         years = full_years_between(begin, as_of)
         d.assumptions.append(TIER_ASSUMPTION)
-        d.facts.append(Fact("פרמיה חודשית", f"{_money(policy.monthly_premium)} ₪", src))
+        d.facts.append(Fact("פרמיה חודשית", f"{format_money(policy.monthly_premium)} ₪", src))
         if policy.product == HEALTH:
             if amount > 0:
                 d.numbers["potential_grant"] = amount
                 d.facts.append(Fact(
                     "מענק ותק פוטנציאלי (לנציג בלבד)",
-                    f"{_money(amount)} ₪ ({percent}% × פרמיה שנתית, ותק {years} שנים) – רק אם לא שולמה "
+                    f"{format_money(amount)} ₪ ({percent}% × פרמיה שנתית, ותק {years} שנים) – רק אם לא שולמה "
                     "ללקוח תביעה ב-12 החודשים האחרונים",
                     f"{REFUNDS} §2ג, {REFUNDS} §3"))
                 d.missing.append(
@@ -430,7 +405,7 @@ def _estimate(policy: Policy, as_of: date, repo: PolicyRepository, start) -> Dec
         else:
             grant = amount
             d.numbers["grant"] = amount
-            d.facts.append(Fact("מענק ותק", f"{_money(amount)} ₪ ({percent}% × פרמיה שנתית, ותק {years} שנים)",
+            d.facts.append(Fact("מענק ותק", f"{format_money(amount)} ₪ ({percent}% × פרמיה שנתית, ותק {years} שנים)",
                                 f"{REFUNDS} §2ג"))
 
     arrears = _check_arrears(policy, as_of, d)
@@ -446,20 +421,20 @@ def _estimate(policy: Policy, as_of: date, repo: PolicyRepository, start) -> Dec
 
     if grant is not None:
         if grant > 0:
-            d.say_to_customer.append(f"מענק ותק: {_money(grant)} ₪{NOT_FROZEN}.")
+            d.say_to_customer.append(f"מענק ותק: {format_money(grant)} ₪{NOT_FROZEN}.")
         if arrears is False:
             estimate = round(grant - fee, 2)
             if estimate >= 0:
                 d.numbers["conditional_estimate"] = estimate
-                d.facts.append(Fact("החזר משוער מותנה", f"{_money(estimate)} ₪ (מענק ותק פחות דמי ביטול), "
+                d.facts.append(Fact("החזר משוער מותנה", f"{format_money(estimate)} ₪ (מענק ותק פחות דמי ביטול), "
                                     "בתוספת פרמיה ששולמה מראש", f"{REFUNDS} §2"))
                 d.say_to_customer.append(
-                    f"החזר משוער: כ-{_money(estimate)} ₪{NOT_FROZEN}, בתוספת כל פרמיה ששולמה מראש לתקופה "
+                    f"החזר משוער: כ-{format_money(estimate)} ₪{NOT_FROZEN}, בתוספת כל פרמיה ששולמה מראש לתקופה "
                     "שאחרי מועד הביטול."
                 )
             else:
                 d.missing.append(
-                    f"דמי הביטול ({_money(fee)} ₪) גבוהים ממענק הוותק ({_money(grant)} ₪) – הנוהל אינו מגדיר "
+                    f"דמי הביטול ({format_money(fee)} ₪) גבוהים ממענק הוותק ({format_money(grant)} ₪) – הנוהל אינו מגדיר "
                     "כיצד נגבה ההפרש"
                 )
     if arrears:
